@@ -1,0 +1,172 @@
+:root {
+    --primary: #1e3a8a;
+    --success: #10b981;
+    --danger: #ef4444;
+    --warning: #f59e0b;
+    --bg: #f3f4f6;
+    --dark: #1f2937;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--bg);
+    margin: 0;
+    color: var(--dark);
+}
+
+header {
+    background-color: var(--primary);
+    color: white;
+    padding: 15px 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+}
+
+.container {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 25px;
+    padding: 30px;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.panel {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+}
+
+.video-container {
+    position: relative;
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    width: 100%;
+    max-width: 640px;
+    margin: 0 auto;
+    min-height: 240px;
+}
+
+video {
+    width: 100%;
+    height: auto;
+    display: block;
+    transform: scaleX(-1); /* Espejo */
+}
+
+.status-box {
+    margin-top: 15px;
+    padding: 12px;
+    border-radius: 6px;
+    font-weight: bold;
+    text-align: center;
+    background: #e5e7eb;
+    transition: all 0.3s ease;
+}
+.status-box.error { background: #fee2e2; color: #991b1b; }
+.status-box.ok { background: #d1fae5; color: #065f46; }
+
+.diag-box {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #6b7280;
+    text-align: center;
+}
+
+.control-group { margin-bottom: 20px; }
+
+select, input, button {
+    width: 100%;
+    padding: 10px;
+    margin-top: 5px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+
+button {
+    background-color: var(--primary);
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background 0.2s;
+}
+button:hover { background-color: #172554; }
+button:disabled { background-color: #9ca3af; cursor: not-allowed; }
+
+.btn-success { background-color: var(--success); }
+.btn-success:hover { background-color: #047857; }
+.btn-danger { background-color: var(--danger); }
+.btn-danger:hover { background-color: #b91c1c; }
+
+/* --- Confirmación manual --- */
+.confirm-box {
+    margin-top: 15px;
+    padding: 16px;
+    border-radius: 8px;
+    background: #fffbeb;
+    border: 2px solid var(--warning);
+    text-align: center;
+}
+.confirm-texto { font-size: 16px; margin-bottom: 12px; }
+.confirm-botones { display: flex; gap: 10px; }
+.confirm-botones button { width: auto; flex: 1; margin-top: 0; }
+
+/* --- Resumen de asistencia por curso --- */
+.resumen-lista { margin-top: 10px; font-size: 13px; }
+.resumen-fila {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid #f3f4f6;
+}
+.resumen-fila strong { color: var(--primary); }
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+th, td {
+    padding: 10px;
+    text-align: left;
+    border-bottom: 1px solid #e5e7eb;
+    font-size: 14px;
+}
+th { background-color: #f9fafb; color: #4b5563; }
+
+/* --- Pantalla de Login --- */
+.login-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+}
+
+.login-card {
+    background: white;
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    width: 100%;
+    max-width: 380px;
+    text-align: center;
+}
+
+.login-card h2 {
+    color: var(--primary);
+    margin-top: 0;
+    margin-bottom: 5px;
+}
+
+.login-card .subtitle {
+    color: #6b7280;
+    font-size: 14px;
+    margin-bottom: 20px;
+}

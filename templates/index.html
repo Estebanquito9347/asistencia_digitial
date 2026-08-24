@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal de Asistencia Escolar - Biometría Híbrida</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+    <header>
+        <h2>🏫 Sistema Biométrico Escolar</h2>
+        <div><strong>Portal de Preceptoras v1.3</strong></div>
+    </header>
+
+    <div class="container">
+        <!-- Panel de la Cámara -->
+        <div class="panel">
+            <h3>📸 Control Facial en Vivo</h3>
+            <div class="control-group">
+                <label for="cursoSelect"><strong>Curso Actual a Controlar:</strong></label>
+                <select id="cursoSelect">
+                    <!-- Se llena desde Python -->
+                </select>
+            </div>
+
+            <div class="video-container">
+                <video id="webcam" autoplay playsinline muted></video>
+            </div>
+
+            <div id="status" class="status-box">Inicializando sistema de video...</div>
+            <div id="diagnostico" class="diag-box"></div>
+
+            <!-- Confirmación manual: aparece cuando la cámara detecta un candidato -->
+            <div id="confirmacion" class="confirm-box" style="display:none;">
+                <div class="confirm-texto">
+                    ¿Sos <strong id="confirmNombre"></strong>, del curso <strong id="confirmCurso"></strong>?
+                </div>
+                <div class="confirm-botones">
+                    <button class="btn-success" onclick="confirmarAsistencia()">✅ Sí, soy yo</button>
+                    <button class="btn-danger" onclick="rechazarAsistencia()">❌ No soy yo</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel de Administración -->
+        <div class="panel">
+            <h3>☝️ Enrolamiento de Huellas</h3>
+            <div class="control-group">
+                <input type="number" id="idHuella" placeholder="ID numérico del alumno">
+                <button id="btnEnrolar" onclick="enrolarHuella()">🔴 Registrar Huella en Lector</button>
+                <div id="statusHuella" class="diag-box"></div>
+            </div>
+
+            <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 25px 0;">
+
+            <h3>📊 Asistencia de hoy</h3>
+            <button class="btn-success" onclick="descargarCSV()">📥 Descargar CSV</button>
+
+            <div style="max-height: 250px; overflow-y: auto; margin-top: 15px;">
+                <table>
+                    <thead>
+                        <tr><th>Hora</th><th>Alumno</th><th>Método</th></tr>
+                    </thead>
+                    <tbody id="tablaAsistencia">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
