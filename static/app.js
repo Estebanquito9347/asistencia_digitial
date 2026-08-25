@@ -119,9 +119,15 @@ function iniciarBucleAnalisis() {
         .then(res => res.json())
         .then(data => {
             if (data.detectado && !esperandoConfirmacion) {
+                const confianza = typeof data.confianza === 'number' ? data.confianza.toFixed(2) : 'n/a';
                 mostrarConfirmacion(data.alumno, data.curso, 'FACIAL');
+                diagBox.innerText = `Confianza estimada: ${confianza}`;
             } else if (!data.detectado && !esperandoConfirmacion) {
+                const motivo = data.motivo || 'desconocido';
+                const detalle = data.curso_real ? `Curso real: ${data.curso_real}` : '';
+                const distancia = typeof data.distancia === 'number' ? ` • distancia: ${data.distancia.toFixed(3)}` : '';
                 setStatus("🔍 Buscando alumnos...", null);
+                diagBox.innerText = `No coincide: ${motivo}${detalle ? ` • ${detalle}` : ''}${distancia}`;
             }
         })
         .catch(err => console.error('Error en /procesar_fotograma:', err));

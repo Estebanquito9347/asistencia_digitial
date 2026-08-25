@@ -263,12 +263,12 @@ class GestorRostros:
     def _buscar_en_frame_embeddings(self, frame_bgr: np.ndarray, curso_esperado: str = None) -> dict:
         embeddings = [m["embedding"] for m in self.muestras if "embedding" in m and m.get("embedding") is not None]
         if not embeddings:
-            return {"detectado": False}
+            return {"detectado": False, "motivo": "sin_embedded_samples"}
 
         rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         ubicaciones = self._face_recognition.face_locations(rgb, model="hog")
         if not ubicaciones:
-            return {"detectado": False}
+            return {"detectado": False, "motivo": "rostro_no_detectado"}
 
         cara = self._seleccionar_cara_mas_grande(ubicaciones)
         codigos = self._face_recognition.face_encodings(
@@ -278,7 +278,7 @@ class GestorRostros:
             model="small",
         )
         if not codigos:
-            return {"detectado": False}
+            return {"detectado": False, "motivo": "rostro_no_codificado"}
 
         consulta = codigos[0]
         distancias = [
@@ -287,7 +287,7 @@ class GestorRostros:
             if "embedding" in muestra and muestra.get("embedding") is not None
         ]
         if not distancias:
-            return {"detectado": False}
+            return {"detectado": False, "motivo": "sin_comparacion"}
 
         distancias.sort(key=lambda par: par[0])
         mejor_dist, mejor = distancias[0]
@@ -295,26 +295,26 @@ class GestorRostros:
                     mejor["nombre"], mejor["curso"], mejor_dist, self.umbral_distancia)
 
         if mejor_dist > self.umbral_distancia:
-            return {"detectado": False}
+            return {"detectado": False, "motivo": "distancia_too_high", "distancia": mejor_dist}
 
         for dist, muestra in distancias[1:]:
             if (muestra["nombre"], muestra["curso"]) != (mejor["nombre"], mejor["curso"]):
                 if (dist - mejor_dist) < self.margen_minimo:
                     logger.warning("Match ambiguo entre %s (%.4f) y %s (%.4f), se descarta por seguridad.",
                                    mejor["nombre"], mejor_dist, muestra["nombre"], dist)
-                    return {"detectado": False}
+                    return {"detectado": False, "motivo": "ambiguous_match", "distancia": mejor_dist}
                 break
 
         if curso_esperado is not None and mejor["curso"] != curso_esperado:
             logger.info("Reconocido %s (curso real: %s) pero el curso seleccionado es %s, se descarta.",
                         mejor["nombre"], mejor["curso"], curso_esperado)
-            return {"detectado": False}
+            return {"detectado": False, "motivo": "curso_incorrecto", "curso": mejor["curso"], "distancia": mejor_dist}
 
         return {"detectado": True, "alumno": mejor["nombre"], "curso": mejor["curso"], "distancia": mejor_dist}
 
     def buscar_en_frame(self, frame_bgr: np.ndarray, curso_esperado: str = None) -> dict:
         if not self.entrenado:
-            return {"detectado": False}
+            return {"detectado": False, "motivo": "modelo_no_entrenado"}
 
         if self.usar_face_recognition:
             resultado = self._buscar_en_frame_embeddings(frame_bgr, curso_esperado)
@@ -329,7 +329,7 @@ class GestorRostros:
             minSize=MIN_TAMANIO_CARA,
         )
         if len(caras) == 0:
-            return {"detectado": False}
+            return {"detectado": False, "motivo": "rostro_no_detectado"}
 
         x, y, w, h = self._seleccionar_cara_mas_grande(caras)
         rostro = cv2.resize(gris[y:y + h, x:x + w], TAMANO_ROSTRO)
@@ -341,7 +341,7 @@ class GestorRostros:
             if "hist" in m
         ]
         if not distancias:
-            return {"detectado": False}
+            return {"detectado": False, "motivo": "sin_comparacion"}
 
         distancias.sort(key=lambda par: par[0])
 
@@ -350,19 +350,19 @@ class GestorRostros:
                     mejor["nombre"], mejor["curso"], mejor_dist, self.umbral_distancia)
 
         if mejor_dist > self.umbral_distancia:
-            return {"detectado": False}
+            return {"detectado": False, "motivo": "distancia_too_high", "distancia": mejor_dist}
 
         for dist, m in distancias[1:]:
             if (m["nombre"], m["curso"]) != (mejor["nombre"], mejor["curso"]):
                 if (dist - mejor_dist) < self.margen_minimo:
                     logger.warning("Match ambiguo entre %s (%.2f) y %s (%.2f), se descarta por seguridad.",
                                    mejor["nombre"], mejor_dist, m["nombre"], dist)
-                    return {"detectado": False}
+                    return {"detectado": False, "motivo": "ambiguous_match", "distancia": mejor_dist}
                 break
 
         if curso_esperado is not None and mejor["curso"] != curso_esperado:
             logger.info("Reconocido %s (curso real: %s) pero el curso seleccionado es %s, se descarta.",
                         mejor["nombre"], mejor["curso"], curso_esperado)
-            return {"detectado": False}
+            return {"detectado": False, "motivo": "curso_incorrecto", "curso": mejor["curso"], "distancia": mejor_dist}
 
         return {"detectado": True, "alumno": mejor["nombre"], "curso": mejor["curso"], "distancia": mejor_dist}

@@ -4,7 +4,7 @@ import os
 
 import cv2
 import numpy as np
-from flask import Blueprint, jsonify, render_template, request
+from flask import Blueprint, jsonify, render_template, request, send_file
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ def _decodificar_frame(imagen_raw: str):
     return cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
 
-def create_blueprint(gestor_rostros, carpeta_rostros):
+def create_blueprint(gestor_rostros, carpeta_rostros, registro_asistencia=None):
     bp = Blueprint("api", __name__)
 
     @bp.route("/")
@@ -40,7 +40,7 @@ def create_blueprint(gestor_rostros, carpeta_rostros):
         try:
             frame_bgr = _decodificar_frame(data.get("imagen"))
             if frame_bgr is None:
-                return jsonify({"detectado": False})
+                return jsonify({"detectado": False, "motivo": "imagen_invalida"})
 
             resultado = gestor_rostros.buscar_en_frame(frame_bgr, curso_esperado=curso_seleccionado)
             if resultado["detectado"]:
@@ -48,11 +48,52 @@ def create_blueprint(gestor_rostros, carpeta_rostros):
                     "detectado": True,
                     "alumno": resultado["alumno"],
                     "curso": resultado["curso"],
+                    "distancia": resultado.get("distancia"),
+                    "confianza": resultado.get("confianza", max(0.0, 1.0 - float(resultado.get("distancia", 0.0)) / 1.5)),
                 })
+            return jsonify({
+                "detectado": False,
+                "motivo": resultado.get("motivo", "desconocido"),
+                "curso_real": resultado.get("curso"),
+                "distancia": resultado.get("distancia"),
+                "confianza": resultado.get("confianza"),
+            })
         except Exception:
             logger.exception("Error en procesamiento de fotograma")
 
-        return jsonify({"detectado": False})
+        return jsonify({"detectado": False, "motivo": "error_procesamiento"})
+
+    @bp.route("/confirmar_asistencia", methods=["POST"])
+    def confirmar_asistencia():
+        data = request.get_json(silent=True) or {}
+        alumno = (data.get("alumno") or "").strip()
+        curso = (data.get("curso") or "").strip()
+        metodo = (data.get("metodo") or "FACIAL").strip()
+
+        if not alumno or not curso:
+            return jsonify({"registrado": False, "motivo": "faltan_datos"})
+
+        if registro_asistencia is None:
+            return jsonify({"registrado": False, "motivo": "sin_registro"})
+
+        registrado = registro_asistencia.registrar_presente(alumno, curso, metodo)
+        return jsonify({"registrado": registrado, "motivo": "ya_registrado" if not registrado else "ok"})
+
+    @bp.route("/descargar_asistencia", methods=["GET"])
+    def descargar_asistencia():
+        if registro_asistencia is None:
+            return jsonify({"ok": False, "mensaje": "Sin registro de asistencia"})
+
+        archivo = registro_asistencia.archivo_csv
+        if not os.path.exists(archivo):
+            with open(archivo, "w", encoding="utf-8") as fh:
+                fh.write("Fecha;Hora;Alumno;Curso;Método;Estado\n")
+
+        return send_file(archivo, mimetype="text/csv", as_attachment=True, download_name="asistencia.csv")
+
+    @bp.route("/estado_hardware", methods=["GET"])
+    def estado_hardware():
+        return jsonify({"sensor_huella_disponible": False})
 
     @bp.route("/reentrenar_rostros", methods=["POST"])
     def reentrenar_rostros():
