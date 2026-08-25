@@ -43,24 +43,18 @@
             </div>
         </div>
 
-        <!-- Panel de Administración -->
+        <!-- Panel de Información -->
         <div class="panel">
-            <h3>☝️ Enrolamiento de Huellas</h3>
-            <div class="control-group">
-                <input type="number" id="idHuella" placeholder="ID numérico del alumno">
-                <button id="btnEnrolar" onclick="enrolarHuella()">🔴 Registrar Huella en Lector</button>
-                <div id="statusHuella" class="diag-box"></div>
-            </div>
-
-            <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 25px 0;">
-
-            <h3>📊 Asistencia de hoy</h3>
-            <button class="btn-success" onclick="descargarCSV()">📥 Descargar CSV</button>
+            <h3>ℹ️ Sistema de Reconocimiento Facial</h3>
+            <p style="color: #6b7280; font-size: 14px;">
+                Versión mínima: solo cámara + confirmación manual.
+                La asistencia (CSV) y la huella digital se integran más adelante.
+            </p>
 
             <div style="max-height: 250px; overflow-y: auto; margin-top: 15px;">
                 <table>
                     <thead>
-                        <tr><th>Hora</th><th>Alumno</th><th>Método</th></tr>
+                        <tr><th>Hora</th><th>Alumno</th><th>Confirmado</th></tr>
                     </thead>
                     <tbody id="tablaAsistencia">
                     </tbody>
