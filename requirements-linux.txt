@@ -10,6 +10,7 @@ flask
 pandas
 numpy
 opencv-python
+face-recognition
 pyserial
 pywebview[qt]
 pyinstaller
