@@ -37,20 +37,31 @@ import pickle
 import cv2
 import numpy as np
 
+try:
+    import face_recognition  # type: ignore
+except ImportError:  # pragma: no cover - depende del entorno
+    face_recognition = None
+
 logger = logging.getLogger(__name__)
 
 TAMANO_ROSTRO = (200, 200)
 GRILLA = (8, 8)  # divide la cara en 8x8 celdas para el histograma LBP
+MIN_TAMANIO_CARA = (30, 30)  # tamaño mínimo realista para webcam/rostros pequeños
 
 
 class GestorRostros:
     def __init__(self, carpeta_rostros: str, archivo_modelo: str = "rostros_lbp.pkl",
-                 umbral_distancia: float = 12.0, margen_minimo: float = 1.5,
+                 umbral_distancia: float = 0.45, margen_minimo: float = 0.08,
                  archivo_cascada: str = "haarcascade_frontalface_default.xml"):
-        self.carpeta_rostros = carpeta_rostros
-        self.archivo_modelo = archivo_modelo
-        self.umbral_distancia = umbral_distancia  # chi-cuadrado: menor = mejor match
-        self.margen_minimo = margen_minimo  # diferencia mínima exigida vs. la mejor OTRA persona
+        self.carpeta_rostros = self._resolver_ruta_proyecto(carpeta_rostros)
+        self.archivo_modelo = self._resolver_ruta_proyecto(archivo_modelo)
+        self.umbral_distancia = umbral_distancia
+        self.margen_minimo = margen_minimo
+        self._face_recognition = face_recognition
+        self.usar_face_recognition = self._face_recognition is not None
+
+        if self.usar_face_recognition:
+            logger.info("face_recognition habilitado: comparar embeddings faciales en lugar de histograma LBP.")
 
         self.detector_caras = cv2.CascadeClassifier(self._resolver_ruta_cascada(archivo_cascada))
         if self.detector_caras.empty():
@@ -61,13 +72,27 @@ class GestorRostros:
                 "haarcascade_frontalface_default.xml si no lo tenés)."
             )
 
-        self.muestras = []  # [{"hist": np.ndarray, "nombre": str, "curso": str}, ...]
+        self.muestras = []  # [{"hist": np.ndarray, "nombre": str, "curso": str}, ...] o embedding
         self.entrenado = False
+
+    @staticmethod
+    def _resolver_ruta_proyecto(ruta: str) -> str:
+        if not ruta:
+            return ruta
+        ruta_path = os.path.abspath(ruta)
+        if os.path.isabs(ruta):
+            return ruta
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        return os.path.abspath(os.path.join(base_dir, ruta))
 
     @staticmethod
     def _resolver_ruta_cascada(archivo_cascada: str) -> str:
         if os.path.exists(archivo_cascada):
             return archivo_cascada
+        if not os.path.isabs(archivo_cascada):
+            ruta_proyecto = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", archivo_cascada))
+            if os.path.exists(ruta_proyecto):
+                return ruta_proyecto
         ruta_paquete = os.path.join(cv2.data.haarcascades, "haarcascade_frontalface_default.xml")
         logger.warning("No se encontró '%s' en el proyecto, se intenta con la ruta interna de OpenCV (%s).",
                         archivo_cascada, ruta_paquete)
@@ -124,6 +149,13 @@ class GestorRostros:
     # ------------------------------------------------------------------
     # Entrenamiento
     # ------------------------------------------------------------------
+    def _seleccionar_cara_mas_grande(self, caras):
+        if caras is None:
+            return None
+        if len(caras) == 0:
+            return None
+        return max(caras, key=lambda c: c[2] * c[3])
+
     def entrenar(self, forzar: bool = False) -> None:
         if not forzar and self._cargar_modelo():
             return
@@ -146,18 +178,42 @@ class GestorRostros:
                 ruta = os.path.join(raiz, archivo)
                 nombre = os.path.splitext(archivo)[0].replace("_", " ").replace("-", " ").strip().title()
 
-                img = cv2.imread(ruta, cv2.IMREAD_GRAYSCALE)
-                if img is None:
+                img_color = cv2.imread(ruta, cv2.IMREAD_COLOR)
+                if img_color is None:
                     logger.warning("No se pudo leer %s, se omite.", archivo)
                     continue
 
-                caras = self.detector_caras.detectMultiScale(img, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60))
+                if self.usar_face_recognition:
+                    rgb = cv2.cvtColor(img_color, cv2.COLOR_BGR2RGB)
+                    ubicaciones = self._face_recognition.face_locations(rgb, model="hog")
+                    if not ubicaciones:
+                        logger.warning("Ningún rostro detectado en %s, se omite.", archivo)
+                        continue
+                    cara = self._seleccionar_cara_mas_grande(ubicaciones)
+                    encodings = self._face_recognition.face_encodings(
+                        rgb,
+                        known_face_locations=[cara],
+                        num_jitters=1,
+                        model="small",
+                    )
+                    if not encodings:
+                        continue
+                    self.muestras.append({"embedding": encodings[0], "nombre": nombre, "curso": curso_actual})
+                    continue
+
+                img = cv2.imread(ruta, cv2.IMREAD_GRAYSCALE)
+                caras = self.detector_caras.detectMultiScale(
+                    img,
+                    scaleFactor=1.1,
+                    minNeighbors=4,
+                    minSize=MIN_TAMANIO_CARA,
+                )
                 if len(caras) == 0:
                     logger.warning("Ningún rostro detectado en %s, se omite.", archivo)
                     continue
                 if len(caras) > 1:
                     logger.warning("%s tiene %d rostros detectados, se usa el más grande.", archivo, len(caras))
-                    caras = [max(caras, key=lambda c: c[2] * c[3])]
+                    caras = [self._seleccionar_cara_mas_grande(caras)]
 
                 x, y, w, h = caras[0]
                 rostro = cv2.resize(img[y:y + h, x:x + w], TAMANO_ROSTRO)
@@ -174,8 +230,9 @@ class GestorRostros:
         self._guardar_modelo()
 
         personas_unicas = {(m["nombre"], m["curso"]) for m in self.muestras}
-        logger.info("Entrenamiento facial (LBP): %d muestras, %d alumnos únicos",
-                    len(self.muestras), len(personas_unicas))
+        metodo = "embeddings face_recognition" if self.usar_face_recognition else "LBP"
+        logger.info("Entrenamiento facial (%s): %d muestras, %d alumnos únicos",
+                    metodo, len(self.muestras), len(personas_unicas))
 
     # ------------------------------------------------------------------
     # Cache
@@ -203,24 +260,89 @@ class GestorRostros:
     # ------------------------------------------------------------------
     # Búsqueda sobre un frame de cámara
     # ------------------------------------------------------------------
+    def _buscar_en_frame_embeddings(self, frame_bgr: np.ndarray, curso_esperado: str = None) -> dict:
+        embeddings = [m["embedding"] for m in self.muestras if "embedding" in m and m.get("embedding") is not None]
+        if not embeddings:
+            return {"detectado": False}
+
+        rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+        ubicaciones = self._face_recognition.face_locations(rgb, model="hog")
+        if not ubicaciones:
+            return {"detectado": False}
+
+        cara = self._seleccionar_cara_mas_grande(ubicaciones)
+        codigos = self._face_recognition.face_encodings(
+            rgb,
+            known_face_locations=[cara],
+            num_jitters=1,
+            model="small",
+        )
+        if not codigos:
+            return {"detectado": False}
+
+        consulta = codigos[0]
+        distancias = [
+            (float(dist), muestra)
+            for dist, muestra in zip(self._face_recognition.face_distance(embeddings, consulta), self.muestras)
+            if "embedding" in muestra and muestra.get("embedding") is not None
+        ]
+        if not distancias:
+            return {"detectado": False}
+
+        distancias.sort(key=lambda par: par[0])
+        mejor_dist, mejor = distancias[0]
+        logger.info("Cara detectada con embeddings. Mejor match: %s (%s) distancia=%.4f (umbral=%.3f)",
+                    mejor["nombre"], mejor["curso"], mejor_dist, self.umbral_distancia)
+
+        if mejor_dist > self.umbral_distancia:
+            return {"detectado": False}
+
+        for dist, muestra in distancias[1:]:
+            if (muestra["nombre"], muestra["curso"]) != (mejor["nombre"], mejor["curso"]):
+                if (dist - mejor_dist) < self.margen_minimo:
+                    logger.warning("Match ambiguo entre %s (%.4f) y %s (%.4f), se descarta por seguridad.",
+                                   mejor["nombre"], mejor_dist, muestra["nombre"], dist)
+                    return {"detectado": False}
+                break
+
+        if curso_esperado is not None and mejor["curso"] != curso_esperado:
+            logger.info("Reconocido %s (curso real: %s) pero el curso seleccionado es %s, se descarta.",
+                        mejor["nombre"], mejor["curso"], curso_esperado)
+            return {"detectado": False}
+
+        return {"detectado": True, "alumno": mejor["nombre"], "curso": mejor["curso"], "distancia": mejor_dist}
+
     def buscar_en_frame(self, frame_bgr: np.ndarray, curso_esperado: str = None) -> dict:
         if not self.entrenado:
             return {"detectado": False}
 
+        if self.usar_face_recognition:
+            resultado = self._buscar_en_frame_embeddings(frame_bgr, curso_esperado)
+            if resultado["detectado"] or any("embedding" in m for m in self.muestras):
+                return resultado
+
         gris = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
-        caras = self.detector_caras.detectMultiScale(gris, scaleFactor=1.1, minNeighbors=5, minSize=(80, 80))
+        caras = self.detector_caras.detectMultiScale(
+            gris,
+            scaleFactor=1.1,
+            minNeighbors=4,
+            minSize=MIN_TAMANIO_CARA,
+        )
         if len(caras) == 0:
             return {"detectado": False}
 
-        x, y, w, h = max(caras, key=lambda c: c[2] * c[3])
+        x, y, w, h = self._seleccionar_cara_mas_grande(caras)
         rostro = cv2.resize(gris[y:y + h, x:x + w], TAMANO_ROSTRO)
         hist_consulta = self._extraer_histograma(rostro)
 
-        # Distancia contra CADA muestra guardada (todas las fotos de todos los alumnos)
         distancias = [
             (self._distancia_chi_cuadrado(hist_consulta, m["hist"]), m)
             for m in self.muestras
+            if "hist" in m
         ]
+        if not distancias:
+            return {"detectado": False}
+
         distancias.sort(key=lambda par: par[0])
 
         mejor_dist, mejor = distancias[0]
@@ -230,10 +352,6 @@ class GestorRostros:
         if mejor_dist > self.umbral_distancia:
             return {"detectado": False}
 
-        # Margen anti-ambigüedad: comparar contra la mejor distancia de una
-        # persona DISTINTA (no simplemente el 2do lugar — si el alumno tiene
-        # varias fotos propias, esas ocupan los primeros puestos sin ser
-        # ambigüedad real).
         for dist, m in distancias[1:]:
             if (m["nombre"], m["curso"]) != (mejor["nombre"], mejor["curso"]):
                 if (dist - mejor_dist) < self.margen_minimo:
