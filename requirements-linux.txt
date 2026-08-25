@@ -9,7 +9,7 @@
 flask
 pandas
 numpy
-opencv-contrib-python
+opencv-python
 pyserial
 pywebview[qt]
 pyinstaller
