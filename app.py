@@ -1,8 +1,9 @@
 """
 app.py
 ------
-Punto de entrada. Arma la aplicación Flask a partir de las piezas de
-core/ y registra el blueprint de rutas.
+Punto de entrada. Versión mínima: solo cámara + reconocimiento facial
++ confirmación manual. Asistencia (CSV) y huella quedan aparte, para
+retomar más adelante.
 """
 
 import logging
@@ -10,8 +11,6 @@ import logging
 from flask import Flask
 
 from config import Config
-from core.asistencia import RegistroAsistencia
-from core.biometria_dactilar import GestorHuellas
 from core.reconocimiento_facial import GestorRostros
 from routes.api import create_blueprint
 
@@ -28,25 +27,17 @@ def create_app() -> Flask:
     configurar_logging()
     app = Flask(__name__)
 
-    registro_asistencia = RegistroAsistencia(archivo_csv=Config.ARCHIVO_ASISTENCIA)
-
     gestor_rostros = GestorRostros(
         carpeta_rostros=Config.CARPETA_ROSTROS,
         archivo_modelo=Config.ARCHIVO_MODELO_ROSTROS,
-        archivo_etiquetas=Config.ARCHIVO_ETIQUETAS_ROSTROS,
-        umbral_confianza=Config.FACE_UMBRAL_CONFIANZA,
+        umbral_distancia=Config.FACE_UMBRAL_DISTANCIA,
+        margen_minimo=Config.FACE_MARGEN_MINIMO,
+        archivo_cascada=Config.ARCHIVO_CASCADA_ROSTROS,
     )
     gestor_rostros.entrenar()
 
-    gestor_huellas = GestorHuellas(
-        puerto=Config.FP_PUERTO,
-        baudrate=Config.FP_BAUDRATE,
-    )
-
     bp = create_blueprint(
         gestor_rostros=gestor_rostros,
-        gestor_huellas=gestor_huellas,
-        registro_asistencia=registro_asistencia,
         carpeta_rostros=Config.CARPETA_ROSTROS,
     )
     app.register_blueprint(bp)
