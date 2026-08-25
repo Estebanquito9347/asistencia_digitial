@@ -7,12 +7,10 @@ retomar más adelante.
 """
 
 import logging
-from pathlib import Path
 
 from flask import Flask
 
 from config import Config
-from core.asistencia import RegistroAsistencia
 from core.reconocimiento_facial import GestorRostros
 from routes.api import create_blueprint
 
@@ -31,21 +29,16 @@ def create_app() -> Flask:
 
     gestor_rostros = GestorRostros(
         carpeta_rostros=Config.CARPETA_ROSTROS,
-        archivo_modelo=Config.ARCHIVO_MODELO_ROSTROS,
-        umbral_distancia=Config.FACE_UMBRAL_DISTANCIA,
+        archivo_cache=Config.ARCHIVO_CACHE_ROSTROS,
+        tolerancia=Config.FACE_TOLERANCIA,
         margen_minimo=Config.FACE_MARGEN_MINIMO,
-        archivo_cascada=Config.ARCHIVO_CASCADA_ROSTROS,
+        escala_deteccion=Config.FACE_ESCALA_DETECCION,
     )
     gestor_rostros.entrenar()
-
-    carpeta_asistencia = Path(Config.CARPETA_ROSTROS).resolve().parent / "asistencia"
-    carpeta_asistencia.mkdir(parents=True, exist_ok=True)
-    registro_asistencia = RegistroAsistencia(str(carpeta_asistencia / "asistencia.csv"))
 
     bp = create_blueprint(
         gestor_rostros=gestor_rostros,
         carpeta_rostros=Config.CARPETA_ROSTROS,
-        registro_asistencia=registro_asistencia,
     )
     app.register_blueprint(bp)
 

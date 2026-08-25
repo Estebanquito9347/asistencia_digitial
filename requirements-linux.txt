@@ -1,16 +1,13 @@
-# requirements-linux.txt
-# Para desarrollar/probar en Omarchy (o cualquier Linux).
-#
-# pywebview necesita un motor gráfico embebido en Linux (no viene solo,
-# a diferencia de Windows que usa el WebView2 del sistema). El extra
-# [qt] trae PyQt5 + PyQtWebEngine, 100% instalable con pip, sin tocar
-# pacman para nada de Python. Es la opción más simple en Arch/Omarchy.
+# requirements.txt
+# Enfocado en Linux (Omarchy) por ahora — dlib no tiene el lío de
+# instalación que tiene en Windows (eso se retoma aparte cuando
+# volvamos a empaquetar para Windows).
 
 flask
 pandas
 numpy
 opencv-python
-face-recognition
+face_recognition
 pyserial
 pywebview[qt]
 pyinstaller

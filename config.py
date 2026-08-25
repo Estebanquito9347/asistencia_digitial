@@ -1,27 +1,21 @@
+"""
+config.py
+---------
+Configuración vía variables de entorno.
+"""
+
 import os
-from pathlib import Path
-
-BASE_DIR = Path(__file__).resolve().parent
-
-
-def _resolver_ruta_proyecto(ruta: str) -> str:
-    if not ruta:
-        return str(BASE_DIR)
-    ruta_path = Path(ruta)
-    if ruta_path.is_absolute():
-        return str(ruta_path)
-    return str((BASE_DIR / ruta_path).resolve())
 
 
 class Config:
     # --- Rutas de datos ---
-    CARPETA_ROSTROS = _resolver_ruta_proyecto(os.environ.get("CARPETA_ROSTROS", "rostros"))
-    ARCHIVO_MODELO_ROSTROS = _resolver_ruta_proyecto(os.environ.get("ARCHIVO_MODELO_ROSTROS", "rostros_lbp.pkl"))
-    ARCHIVO_CASCADA_ROSTROS = _resolver_ruta_proyecto(os.environ.get("ARCHIVO_CASCADA_ROSTROS", "haarcascade_frontalface_default.xml"))
+    CARPETA_ROSTROS = os.environ.get("CARPETA_ROSTROS", "rostros")
+    ARCHIVO_CACHE_ROSTROS = os.environ.get("ARCHIVO_CACHE_ROSTROS", "rostros_cache.pkl")
 
-    # --- Reconocimiento facial (embeddings face_recognition; distancia menor = mejor match) ---
-    FACE_UMBRAL_DISTANCIA = float(os.environ.get("FACE_UMBRAL_DISTANCIA", "0.45"))
-    FACE_MARGEN_MINIMO = float(os.environ.get("FACE_MARGEN_MINIMO", "0.08"))
+    # --- Reconocimiento facial (dlib/face_recognition) ---
+    FACE_TOLERANCIA = float(os.environ.get("FACE_TOLERANCIA", "0.5"))
+    FACE_MARGEN_MINIMO = float(os.environ.get("FACE_MARGEN_MINIMO", "0.04"))
+    FACE_ESCALA_DETECCION = float(os.environ.get("FACE_ESCALA_DETECCION", "0.5"))
 
     # --- Servidor ---
     HOST = os.environ.get("HOST", "0.0.0.0")
