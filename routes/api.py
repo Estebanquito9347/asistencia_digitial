@@ -140,12 +140,42 @@ def create_blueprint(gestor_rostros, registro_asistencia, gestor_horarios, carpe
             cursos = sorted(d for d in os.listdir(carpeta_rostros) if os.path.isdir(os.path.join(carpeta_rostros, d)))
 
         horarios_guardados = gestor_horarios.obtener_todos()
-        resultado = {curso: gestor_horarios.obtener(curso) for curso in cursos}
+        hoy = datetime.now().date()
+        resultado = {}
+        for curso in cursos:
+            efectivo = gestor_horarios.obtener(curso, hoy)
+            habitual = gestor_horarios.obtener(curso)
+            contraturno = gestor_horarios.obtener_contraturno(curso)
+            cfg = gestor_horarios.obtener_todos().get(curso, {})
+            resultado[curso] = {
+                **efectivo,
+                "hora_habitual": habitual["hora_entrada"],
+                "tolerancia_habitual": habitual["tolerancia_minutos"],
+                "hora_contraturno": contraturno["hora_entrada"],
+                "tolerancia_contraturno": contraturno["tolerancia_minutos"],
+                "modo_hoy": ("contraturno" if (
+                    isinstance(cfg, dict) and
+                    cfg.get("cambios", {}).get(hoy.strftime("%Y-%m-%d"), {}).get("tipo")
+                    in ("contraturno", "contraturno_id")
+                ) else None),
+                "modificado_hoy": efectivo != habitual,
+            }
         # Por si hay horarios guardados de cursos que ya no tienen carpeta
         # (cambiaron de nombre, etc.) — los mostramos igual para no perder
         # la configuración silenciosamente.
         for curso, cfg in horarios_guardados.items():
-            resultado.setdefault(curso, cfg)
+            habitual_cfg = cfg.get("habitual", cfg)
+            contraturno_cfg = cfg.get("contraturno", habitual_cfg)
+            cambio_hoy = cfg.get("cambios", {}).get(hoy.strftime("%Y-%m-%d"), {})
+            resultado.setdefault(curso, {
+                **gestor_horarios.obtener(curso, hoy),
+                "hora_habitual": habitual_cfg.get("hora_entrada", "07:20"),
+                "tolerancia_habitual": habitual_cfg.get("tolerancia_minutos", 10),
+                "hora_contraturno": contraturno_cfg.get("hora_entrada", "07:20"),
+                "tolerancia_contraturno": contraturno_cfg.get("tolerancia_minutos", 10),
+                "modo_hoy": cambio_hoy.get("tipo"),
+                "modificado_hoy": bool(cambio_hoy),
+            })
 
         return jsonify({"horarios": resultado})
 
@@ -156,16 +186,94 @@ def create_blueprint(gestor_rostros, registro_asistencia, gestor_horarios, carpe
         curso = (data.get("curso") or "").strip()
         hora_entrada = (data.get("hora_entrada") or "").strip()
         tolerancia_minutos = data.get("tolerancia_minutos", 10)
+        # Las llamadas antiguas siguen guardando el horario habitual;
+        # la interfaz nueva envía False explícitamente para un cambio de hoy.
+        guardar_habitual = bool(data.get("guardar_habitual", True))
+        accion = data.get("accion", "habitual" if guardar_habitual else "especial")
 
-        if not curso or not hora_entrada:
+        if accion in ("activar_normal", "activar_contraturno"):
+            try:
+                gestor_horarios.activar_modo(
+                    curso, "normal" if accion == "activar_normal" else "contraturno",
+                    fecha=datetime.now().date()
+                )
+            except ValueError as exc:
+                return jsonify({"ok": False, "mensaje": str(exc)}), 400
+            return jsonify({"ok": True})
+
+        if not hora_entrada:
             return jsonify({"ok": False, "mensaje": "Faltan 'curso' o 'hora_entrada'"}), 400
 
         try:
-            gestor_horarios.establecer(curso, hora_entrada, int(tolerancia_minutos))
-        except ValueError:
-            return jsonify({"ok": False, "mensaje": "Formato de hora inválido (usar HH:MM)"}), 400
+            gestor_horarios.establecer(
+                curso, hora_entrada, int(tolerancia_minutos),
+                fecha=datetime.now().date(), habitual=accion == "habitual",
+                modo="contraturno" if accion == "contraturno" else "especial"
+            )
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "mensaje": "Revisá la hora (HH:MM) y una tolerancia entre 0 y 120"}), 400
 
         return jsonify({"ok": True})
+
+    @bp.route("/admin/api/contraturnos", methods=["GET"])
+    @requiere_admin
+    def admin_obtener_contraturnos():
+        return jsonify({"contraturnos": gestor_horarios.obtener_contraturnos()})
+
+    @bp.route("/admin/api/contraturnos", methods=["POST"])
+    @requiere_admin
+    def admin_crear_contraturno():
+        return _guardar_contraturno()
+
+    @bp.route("/admin/api/contraturnos/<identificador>", methods=["PUT"])
+    @requiere_admin
+    def admin_actualizar_contraturno(identificador):
+        return _guardar_contraturno(identificador)
+
+    @bp.route("/admin/api/contraturnos/<identificador>", methods=["DELETE"])
+    @requiere_admin
+    def admin_eliminar_contraturno(identificador):
+        data = request.get_json(silent=True) or {}
+        curso = (data.get("curso") or "").strip()
+        try:
+            gestor_horarios.eliminar_contraturno(identificador, curso)
+        except KeyError:
+            return jsonify({"ok": False, "mensaje": "Contraturno no encontrado"}), 404
+        return jsonify({"ok": True})
+
+    @bp.route("/admin/api/contraturnos/<identificador>/activar", methods=["POST"])
+    @requiere_admin
+    def admin_activar_contraturno(identificador):
+        data = request.get_json(silent=True) or {}
+        curso = (data.get("curso") or "").strip()
+        try:
+            gestor_horarios.activar_contraturno_registro(
+                identificador, curso, fecha=datetime.now().date()
+            )
+        except KeyError:
+            return jsonify({"ok": False, "mensaje": "Contraturno no encontrado"}), 404
+        return jsonify({"ok": True})
+
+    def _guardar_contraturno(identificador=None):
+        data = request.get_json(silent=True) or {}
+        curso = (data.get("curso") or "").strip()
+        dia = (data.get("dia") or "").strip().lower()
+        hora = (data.get("hora_entrada") or "").strip()
+        tolerancia = data.get("tolerancia_minutos", 10)
+        if not curso or dia not in ("lunes", "martes", "miércoles", "jueves", "viernes"):
+            return jsonify({"ok": False, "mensaje": "Elegí un curso y un día válido"}), 400
+        try:
+            if identificador:
+                registro = gestor_horarios.actualizar_contraturno(
+                    identificador, curso, dia, hora, tolerancia
+                )
+            else:
+                registro = gestor_horarios.crear_contraturno(curso, dia, hora, tolerancia)
+        except KeyError:
+            return jsonify({"ok": False, "mensaje": "Contraturno no encontrado"}), 404
+        except (TypeError, ValueError):
+            return jsonify({"ok": False, "mensaje": "Revisá la hora y la tolerancia (0 a 120)"}), 400
+        return jsonify({"ok": True, "contraturno": registro})
 
     @bp.route("/admin/descargar_asistencia/<curso>")
     @requiere_admin

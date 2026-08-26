@@ -46,10 +46,31 @@
         <div class="panel">
             <h3>⏰ Horarios por curso</h3>
             <p style="color:#6b7280; font-size:13px;">
-                Definí a qué hora entra cada curso y cuántos minutos de
-                tolerancia hay antes de marcar "TARDE".
+                Cada curso puede tener un horario distinto. Usá
+                <strong>Modificar hoy</strong> cuando haya un cambio puntual;
+                mañana se retoma el horario habitual.
             </p>
             <div id="listaHorarios"></div>
+        </div>
+
+        <div class="panel">
+            <h3>🔁 Contraturnos</h3>
+            <p style="color:#6b7280; font-size:13px;">
+                Agregá, modificá o eliminá los horarios alternativos de cada
+                curso por día de la semana.
+            </p>
+            <form id="formContraturno" class="contraturno-form">
+                <select id="contraturnoCurso" required></select>
+                <select id="contraturnoDia" required>
+                    <option value="lunes">Lunes</option><option value="martes">Martes</option>
+                    <option value="miércoles">Miércoles</option><option value="jueves">Jueves</option>
+                    <option value="viernes">Viernes</option>
+                </select>
+                <input id="contraturnoHora" type="time" required>
+                <input id="contraturnoTolerancia" type="number" min="0" max="120" value="10" required>
+                <button type="submit">Agregar contraturno</button>
+            </form>
+            <div id="listaContraturnos"></div>
         </div>
     </div>
 

@@ -24,6 +24,7 @@ function cargarCursosEnFiltro() {
                 option.innerText = curso;
                 filtroCurso.appendChild(option);
             });
+            cargarContraturnos();
         })
         .catch(err => console.error('Error al cargar cursos:', err));
 }
@@ -84,29 +85,113 @@ function cargarHorarios() {
                 const cfg = data.horarios[curso];
                 return `
                     <div class="control-group horario-fila">
-                        <strong>${curso}</strong>
-                        <label>Hora de entrada
-                            <input type="time" id="hora-${curso}" value="${cfg.hora_entrada}">
+                        <div class="horario-curso"><strong>${curso}</strong>
+                            ${cfg.modificado_hoy ? '<small>⚠️ Cambio aplicado hoy</small>' : ''}
+                        </div>
+                        <label>Habitual
+                            <input type="time" id="hora-habitual-${curso}" value="${cfg.hora_habitual}">
                         </label>
-                        <label>Tolerancia (min)
-                            <input type="number" id="tolerancia-${curso}" value="${cfg.tolerancia_minutos}" min="0" max="120">
+                        <label>Tolerancia
+                            <input type="number" id="tolerancia-habitual-${curso}" value="${cfg.tolerancia_habitual}" min="0" max="120">
                         </label>
-                        <button onclick="guardarHorario('${curso}')">Guardar</button>
+                        <button onclick="guardarHorario('${curso}', true)">Guardar habitual</button>
+                        <label>Entrada de hoy
+                            <input type="time" id="hora-hoy-${curso}" value="${cfg.hora_entrada}">
+                        </label>
+                        <label>Tolerancia
+                            <input type="number" id="tolerancia-hoy-${curso}" value="${cfg.tolerancia_minutos}" min="0" max="120">
+                        </label>
+                        <button class="btn-success" onclick="guardarHorario('${curso}', false)">Modificar hoy</button>
                     </div>
                 `;
             }).join('');
+
         })
         .catch(err => console.error('Error al cargar horarios:', err));
 }
 
-function guardarHorario(curso) {
-    const hora_entrada = document.getElementById(`hora-${curso}`).value;
-    const tolerancia_minutos = document.getElementById(`tolerancia-${curso}`).value;
+function cargarContraturnos() {
+    fetch('/admin/api/contraturnos')
+        .then(res => res.json())
+        .then(data => {
+            const cursos = [...filtroCurso.options].filter(o => o.value).map(o => o.value);
+            const selector = document.getElementById('contraturnoCurso');
+            selector.innerHTML = cursos.map(c => `<option value="${c}">${c}</option>`).join('');
+            const lista = document.getElementById('listaContraturnos');
+            lista.innerHTML = (data.contraturnos || []).map(r => `
+                <div class="contraturno-registro">
+                    <strong>${r.curso}</strong> · ${r.dia} · ${r.hora_entrada}
+                    <span>(${r.tolerancia_minutos} min)</span>
+                    <button onclick="editarContraturno('${r.id}', '${r.curso}', '${r.dia}', '${r.hora_entrada}', ${r.tolerancia_minutos})">Editar</button>
+                    <button class="btn-success" onclick="activarContraturno('${r.id}', '${r.curso}')">Usar hoy</button>
+                    <button class="btn-danger" onclick="eliminarContraturno('${r.id}', '${r.curso}')">Eliminar</button>
+                </div>
+            `).join('') || '<em>No hay contraturnos cargados.</em>';
+        })
+        .catch(err => console.error('Error al cargar contraturnos:', err));
+}
+
+function activarContraturno(id, curso) {
+    fetch(`/admin/api/contraturnos/${encodeURIComponent(id)}/activar`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({curso})
+    }).then(res => res.json()).then(data => {
+        statusAdmin.innerText = data.ok ? `✅ Contraturno de ${curso} activado para hoy` : `❌ ${data.mensaje}`;
+    });
+}
+
+document.getElementById('formContraturno').addEventListener('submit', event => {
+    event.preventDefault();
+    const datos = {
+        curso: document.getElementById('contraturnoCurso').value,
+        dia: document.getElementById('contraturnoDia').value,
+        hora_entrada: document.getElementById('contraturnoHora').value,
+        tolerancia_minutos: document.getElementById('contraturnoTolerancia').value
+    };
+    fetch('/admin/api/contraturnos', {
+        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(datos)
+    }).then(res => res.json()).then(data => {
+        statusAdmin.innerText = data.ok ? '✅ Contraturno agregado' : `❌ ${data.mensaje}`;
+        if (data.ok) cargarContraturnos();
+    });
+});
+
+function editarContraturno(id, curso, dia, hora, tolerancia) {
+    const datos = {
+        curso, dia: prompt('Día (lunes a viernes):', dia),
+        hora_entrada: prompt('Hora de entrada (HH:MM):', hora),
+        tolerancia_minutos: prompt('Tolerancia en minutos:', tolerancia)
+    };
+    if (!datos.dia || !datos.hora_entrada || datos.tolerancia_minutos === null) return;
+    fetch(`/admin/api/contraturnos/${encodeURIComponent(id)}`, {
+        method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(datos)
+    }).then(res => res.json()).then(data => {
+        statusAdmin.innerText = data.ok ? '✅ Contraturno actualizado' : `❌ ${data.mensaje}`;
+        if (data.ok) cargarContraturnos();
+    });
+}
+
+function eliminarContraturno(id, curso) {
+    if (!confirm(`¿Eliminar el contraturno de ${curso}?`)) return;
+    fetch(`/admin/api/contraturnos/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({curso})
+    })
+    .then(res => res.json()).then(data => {
+        statusAdmin.innerText = data.ok ? '✅ Contraturno eliminado' : `❌ ${data.mensaje}`;
+        if (data.ok) cargarContraturnos();
+    });
+}
+
+function guardarHorario(curso, guardar_habitual) {
+    const sufijo = guardar_habitual ? 'habitual' : 'hoy';
+    const hora_entrada = document.getElementById(`hora-${sufijo}-${curso}`).value;
+    const tolerancia_minutos = document.getElementById(`tolerancia-${sufijo}-${curso}`).value;
 
     fetch('/admin/api/horarios', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ curso, hora_entrada, tolerancia_minutos })
+        body: JSON.stringify({ curso, hora_entrada, tolerancia_minutos, guardar_habitual })
     })
     .then(res => res.json())
     .then(data => {

@@ -1,0 +1,18 @@
+{
+  "6B": {
+    "habitual": {
+      "hora_entrada": "07:20",
+      "tolerancia_minutos": 10
+    },
+    "cambios": {},
+    "contraturnos": [
+      {
+        "id": "26e0cd23fc8d4c09b5e31b93ee347b40",
+        "curso": "6B",
+        "dia": "martes",
+        "hora_entrada": "16:30",
+        "tolerancia_minutos": 10
+      }
+    ]
+  }
+}

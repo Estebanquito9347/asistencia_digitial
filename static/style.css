@@ -188,3 +188,35 @@ th { background-color: #f9fafb; color: #4b5563; }
     width: auto;
     padding: 8px 14px;
 }
+.horario-curso {
+    min-width: 58px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.horario-curso small {
+    color: var(--warning);
+    font-size: 11px;
+}
+
+.contraturno-form {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+    margin-bottom: 15px;
+}
+.contraturno-form button { margin-top: 5px; }
+.contraturno-registro {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 9px 0;
+    border-bottom: 1px solid #f3f4f6;
+    font-size: 14px;
+}
+.contraturno-registro span { color: #6b7280; }
+.contraturno-registro button { width: auto; padding: 6px 10px; margin-left: auto; }
+@media (max-width: 700px) {
+    .contraturno-form { grid-template-columns: 1fr 1fr; }
+}
