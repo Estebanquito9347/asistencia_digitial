@@ -17,7 +17,18 @@
         <!-- Registros del día -->
         <div class="panel">
             <h3>📊 Asistencia de hoy</h3>
-            <button class="btn-success" onclick="descargarCSV()">📥 Descargar CSV</button>
+
+            <div id="resumenCursos" class="resumen-lista"></div>
+
+            <div class="control-group horario-fila" style="margin-top:15px;">
+                <label>Filtrar / descargar
+                    <select id="filtroCurso">
+                        <option value="">Todos los cursos</option>
+                    </select>
+                </label>
+                <button class="btn-success" onclick="descargarCSV()">📥 Descargar CSV del curso</button>
+            </div>
+
             <button onclick="reentrenar()">🔄 Reentrenar reconocimiento facial</button>
             <div id="statusAdmin" class="diag-box"></div>
 

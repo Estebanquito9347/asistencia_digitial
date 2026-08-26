@@ -1,4 +1,4 @@
-\// static/app.js
+// static/app.js
 // ----------------
 // Versión mínima: cámara + selección de curso + confirmación manual.
 // No hay persistencia todavía (ni CSV ni huella) — la confirmación

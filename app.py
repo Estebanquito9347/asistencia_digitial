@@ -30,7 +30,7 @@ def create_app() -> Flask:
     app = Flask(__name__)
     app.secret_key = Config.SECRET_KEY
 
-    registro_asistencia = RegistroAsistencia(archivo_csv=Config.ARCHIVO_ASISTENCIA)
+    registro_asistencia = RegistroAsistencia(carpeta_asistencia=Config.CARPETA_ASISTENCIA)
     gestor_horarios = GestorHorarios(archivo_horarios=Config.ARCHIVO_HORARIOS)
 
     gestor_rostros = GestorRostros(

@@ -12,7 +12,7 @@ class Config:
     # --- Rutas de datos ---
     CARPETA_ROSTROS = os.environ.get("CARPETA_ROSTROS", "rostros")
     ARCHIVO_CACHE_ROSTROS = os.environ.get("ARCHIVO_CACHE_ROSTROS", "rostros_cache.pkl")
-    ARCHIVO_ASISTENCIA = os.environ.get("ARCHIVO_ASISTENCIA", "asistencia.csv")
+    CARPETA_ASISTENCIA = os.environ.get("CARPETA_ASISTENCIA", "asistencia")
     ARCHIVO_HORARIOS = os.environ.get("ARCHIVO_HORARIOS", "horarios.json")
 
     # --- Reconocimiento facial (dlib/face_recognition) ---

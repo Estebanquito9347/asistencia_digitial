@@ -124,7 +124,13 @@ def create_blueprint(gestor_rostros, registro_asistencia, gestor_horarios, carpe
     @bp.route("/admin/api/registros", methods=["GET"])
     @requiere_admin
     def admin_registros():
-        return jsonify({"registros": registro_asistencia.registros_de_hoy()})
+        curso = request.args.get("curso") or None
+        return jsonify({"registros": registro_asistencia.registros_de_hoy(curso=curso)})
+
+    @bp.route("/admin/api/resumen", methods=["GET"])
+    @requiere_admin
+    def admin_resumen():
+        return jsonify({"cursos": registro_asistencia.resumen_del_dia()})
 
     @bp.route("/admin/api/horarios", methods=["GET"])
     @requiere_admin
@@ -161,12 +167,14 @@ def create_blueprint(gestor_rostros, registro_asistencia, gestor_horarios, carpe
 
         return jsonify({"ok": True})
 
-    @bp.route("/admin/descargar_asistencia")
+    @bp.route("/admin/descargar_asistencia/<curso>")
     @requiere_admin
-    def admin_descargar_asistencia():
-        if registro_asistencia.existe_archivo():
-            return send_file(registro_asistencia.archivo_csv, as_attachment=True)
-        return "No hay registros guardados hoy", 404
+    def admin_descargar_asistencia(curso):
+        fecha = request.args.get("fecha") or datetime.now().strftime("%Y-%m-%d")
+        ruta = registro_asistencia.ruta_para(curso, fecha)
+        if ruta:
+            return send_file(ruta, as_attachment=True, download_name=f"asistencia_{curso}_{fecha}.csv")
+        return f"No hay registros para {curso} en {fecha}", 404
 
     @bp.route("/admin/reentrenar_rostros", methods=["POST"])
     @requiere_admin
