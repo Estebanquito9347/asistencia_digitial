@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de la Preceptora</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+    <header>
+        <h2>🏫 Panel de la Preceptora</h2>
+        <div><a href="/logout" style="color:white;">Cerrar sesión</a></div>
+    </header>
+
+    <div class="container">
+        <!-- Registros del día -->
+        <div class="panel">
+            <h3>📊 Asistencia de hoy</h3>
+            <button class="btn-success" onclick="descargarCSV()">📥 Descargar CSV</button>
+            <button onclick="reentrenar()">🔄 Reentrenar reconocimiento facial</button>
+            <div id="statusAdmin" class="diag-box"></div>
+
+            <div style="max-height: 400px; overflow-y: auto; margin-top: 15px;">
+                <table>
+                    <thead>
+                        <tr><th>Hora</th><th>Alumno</th><th>Curso</th><th>Estado</th></tr>
+                    </thead>
+                    <tbody id="tablaRegistros"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Configuración de horarios -->
+        <div class="panel">
+            <h3>⏰ Horarios por curso</h3>
+            <p style="color:#6b7280; font-size:13px;">
+                Definí a qué hora entra cada curso y cuántos minutos de
+                tolerancia hay antes de marcar "TARDE".
+            </p>
+            <div id="listaHorarios"></div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='admin.js') }}"></script>
+</body>
+</html>

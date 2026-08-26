@@ -1,9 +1,9 @@
 """
 app.py
 ------
-Punto de entrada. Versión mínima: solo cámara + reconocimiento facial
-+ confirmación manual. Asistencia (CSV) y huella quedan aparte, para
-retomar más adelante.
+Punto de entrada. Arma la aplicación Flask con dos superficies
+separadas: el kiosco público (cámara + confirmación, para el alumno)
+y el panel de la preceptora (/admin, protegido por PIN).
 """
 
 import logging
@@ -11,6 +11,8 @@ import logging
 from flask import Flask
 
 from config import Config
+from core.asistencia import RegistroAsistencia
+from core.horarios import GestorHorarios
 from core.reconocimiento_facial import GestorRostros
 from routes.api import create_blueprint
 
@@ -26,6 +28,10 @@ def configurar_logging():
 def create_app() -> Flask:
     configurar_logging()
     app = Flask(__name__)
+    app.secret_key = Config.SECRET_KEY
+
+    registro_asistencia = RegistroAsistencia(archivo_csv=Config.ARCHIVO_ASISTENCIA)
+    gestor_horarios = GestorHorarios(archivo_horarios=Config.ARCHIVO_HORARIOS)
 
     gestor_rostros = GestorRostros(
         carpeta_rostros=Config.CARPETA_ROSTROS,
@@ -38,7 +44,10 @@ def create_app() -> Flask:
 
     bp = create_blueprint(
         gestor_rostros=gestor_rostros,
+        registro_asistencia=registro_asistencia,
+        gestor_horarios=gestor_horarios,
         carpeta_rostros=Config.CARPETA_ROSTROS,
+        admin_pin=Config.ADMIN_PIN,
     )
     app.register_blueprint(bp)
 
