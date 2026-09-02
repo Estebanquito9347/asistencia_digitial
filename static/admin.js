@@ -114,21 +114,64 @@ function cargarContraturnos() {
     fetch('/admin/api/contraturnos')
         .then(res => res.json())
         .then(data => {
-            const cursos = [...filtroCurso.options].filter(o => o.value).map(o => o.value);
+            const cursos = [...filtroCurso.options].filter(o => o.value).map(o => o.value).sort();
             const selector = document.getElementById('contraturnoCurso');
             selector.innerHTML = cursos.map(c => `<option value="${c}">${c}</option>`).join('');
+            
             const lista = document.getElementById('listaContraturnos');
-            lista.innerHTML = (data.contraturnos || []).map(r => `
-                <div class="contraturno-registro">
-                    <strong>${r.curso}</strong> · ${r.dia} · ${r.hora_entrada}
-                    <span>(${r.tolerancia_minutos} min)</span>
-                    <button onclick="editarContraturno('${r.id}', '${r.curso}', '${r.dia}', '${r.hora_entrada}', ${r.tolerancia_minutos})">Editar</button>
-                    <button class="btn-success" onclick="activarContraturno('${r.id}', '${r.curso}')">Usar hoy</button>
-                    <button class="btn-danger" onclick="eliminarContraturno('${r.id}', '${r.curso}')">Eliminar</button>
-                </div>
-            `).join('') || '<em>No hay contraturnos cargados.</em>';
+            const contraturnos = data.contraturnos || [];
+
+            if (contraturnos.length === 0) {
+                lista.innerHTML = '<em>No hay contraturnos cargados.</em>';
+                return;
+            }
+
+            // Agrupar contraturnos por curso
+            const porCurso = {};
+            contraturnos.forEach(r => {
+                if (!porCurso[r.curso]) porCurso[r.curso] = [];
+                porCurso[r.curso].push(r);
+            });
+
+            // Renderizar estructura expandible por curso
+            lista.innerHTML = Object.keys(porCurso).sort().map(curso => {
+                const id_expandible = `contraturnos-${curso.replace(/\s+/g, '-')}`;
+                return `
+                    <div class="contraturno-curso">
+                        <button type="button" class="btn-expandible" onclick="toggleExpandible('${id_expandible}')">
+                            ▶ ${curso}
+                        </button>
+                        <div id="${id_expandible}" class="contraturno-contenido" style="display:none;">
+                            ${porCurso[curso].map(r => `
+                                <div class="contraturno-registro">
+                                    <span class="contraturno-dia">${r.dia}</span>
+                                    <span class="contraturno-hora">${r.hora_entrada}</span>
+                                    <span class="contraturno-tolerancia">(${r.tolerancia_minutos} min)</span>
+                                    <button type="button" onclick="editarContraturno('${r.id}', '${r.curso}', '${r.dia}', '${r.hora_entrada}', ${r.tolerancia_minutos})">Editar</button>
+                                    <button type="button" class="btn-success" onclick="activarContraturno('${r.id}', '${r.curso}')">Usar hoy</button>
+                                    <button type="button" class="btn-danger" onclick="eliminarContraturno('${r.id}', '${r.curso}')">Eliminar</button>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
         })
         .catch(err => console.error('Error al cargar contraturnos:', err));
+}
+
+function toggleExpandible(id) {
+    const elemento = document.getElementById(id);
+    if (elemento) {
+        elemento.style.display = elemento.style.display === 'none' ? 'block' : 'none';
+        // Cambiar ícono del botón
+        const boton = elemento.previousElementSibling;
+        if (boton) {
+            boton.textContent = boton.textContent.startsWith('▶')
+                ? boton.textContent.replace('▶', '▼')
+                : boton.textContent.replace('▼', '▶');
+        }
+    }
 }
 
 function activarContraturno(id, curso) {
