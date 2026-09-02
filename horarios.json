@@ -11,7 +11,8 @@
         "curso": "6B",
         "dia": "martes",
         "hora_entrada": "16:30",
-        "tolerancia_minutos": 10
+        "tolerancia_minutos": 10,
+        "permanente": true
       }
     ]
   }
