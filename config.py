@@ -8,6 +8,32 @@ import os
 import secrets
 
 
+def _obtener_secret_key() -> str:
+    """
+    Carga o genera una SECRET_KEY persistente.
+    Se guarda en .secret_key para que no se pierda entre reinicios.
+    Esto es crítico para que las cookies de sesión sigan siendo válidas
+    después de reiniciar el servidor.
+    """
+    archivo_secret = ".secret_key"
+    if os.path.exists(archivo_secret):
+        try:
+            with open(archivo_secret, "r") as f:
+                return f.read().strip()
+        except Exception:
+            pass
+    
+    # Si no existe o hay error, generar uno nuevo y guardarlo
+    secret = secrets.token_hex(32)
+    try:
+        with open(archivo_secret, "w") as f:
+            f.write(secret)
+    except Exception:
+        # Si no se puede guardar (permisos), al menos funciona esta sesión
+        pass
+    return secret
+
+
 class Config:
     # --- Rutas de datos ---
     CARPETA_ROSTROS = os.environ.get("CARPETA_ROSTROS", "rostros")
@@ -23,11 +49,10 @@ class Config:
     # --- Panel de la preceptora ---
     # Cambiar el PIN por defecto antes de usar esto con alumnos reales.
     ADMIN_PIN = os.environ.get("ADMIN_PIN", "1234")
-    # Sin esto Flask no puede firmar las cookies de sesión (login). Si no
-    # se define por variable de entorno, se genera una al azar en cada
-    # arranque — suficiente para un solo proceso local, pero significa
-    # que reiniciar el server cierra la sesión de la preceptora.
-    SECRET_KEY = os.environ.get("SECRET_KEY", secrets.token_hex(32))
+    # SECRET_KEY persistente: se guarda en disco para que las cookies
+    # sigan siendo válidas después de reiniciar el servidor.
+    # Esto es especialmente importante en Linux donde se ejecuta la web.
+    SECRET_KEY = os.environ.get("SECRET_KEY", _obtener_secret_key())
 
     # --- Servidor ---
     HOST = os.environ.get("HOST", "0.0.0.0")
