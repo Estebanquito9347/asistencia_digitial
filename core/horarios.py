@@ -7,6 +7,9 @@ si una docente falta y un curso entra más tarde).
 
 Se guarda en un JSON simple (horarios.json) — no hace falta una base
 de datos para esto todavía.
+
+Los contraturnos pueden marcarse como "permanente": true para que no 
+puedan ser editados ni eliminados desde la interfaz.
 """
 
 import json
@@ -121,6 +124,13 @@ class GestorHorarios:
             return dict(cfg)
         return dict(cfg.get("contraturno", cfg["habitual"]))
 
+    def _es_permanente(self, identificador: str, curso: str) -> bool:
+        """Verifica si un contraturno está marcado como permanente."""
+        for registro in self.obtener_contraturnos(curso):
+            if registro.get("id") == identificador:
+                return registro.get("permanente", False)
+        return False
+
     def crear_contraturno(self, curso: str, dia: str, hora_entrada: str,
                           tolerancia_minutos: int) -> dict:
         self._validar_horario(hora_entrada, tolerancia_minutos)
@@ -142,6 +152,9 @@ class GestorHorarios:
 
     def actualizar_contraturno(self, identificador: str, curso: str, dia: str,
                                hora_entrada: str, tolerancia_minutos: int) -> dict:
+        if self._es_permanente(identificador, curso):
+            raise ValueError("No se puede modificar un contraturno permanente")
+        
         self._validar_horario(hora_entrada, tolerancia_minutos)
         with self._lock:
             for registro in self.obtener_contraturnos(curso):
@@ -160,6 +173,9 @@ class GestorHorarios:
         raise KeyError("Contraturno no encontrado")
 
     def eliminar_contraturno(self, identificador: str, curso: str) -> None:
+        if self._es_permanente(identificador, curso):
+            raise ValueError("No se puede eliminar un contraturno permanente")
+        
         with self._lock:
             cfg = self._horarios.get(curso, {})
             registros = cfg.get("contraturnos", [])
