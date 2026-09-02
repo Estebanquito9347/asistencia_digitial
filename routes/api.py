@@ -218,7 +218,11 @@ def create_blueprint(gestor_rostros, registro_asistencia, gestor_horarios, carpe
     @bp.route("/admin/api/contraturnos", methods=["GET"])
     @requiere_admin
     def admin_obtener_contraturnos():
-        return jsonify({"contraturnos": gestor_horarios.obtener_contraturnos()})
+        contraturnos = gestor_horarios.obtener_contraturnos()
+        # Añadir flag de permanencia para la interfaz
+        for c in contraturnos:
+            c["permanente"] = c.get("permanente", False)
+        return jsonify({"contraturnos": contraturnos})
 
     @bp.route("/admin/api/contraturnos", methods=["POST"])
     @requiere_admin
@@ -239,6 +243,8 @@ def create_blueprint(gestor_rostros, registro_asistencia, gestor_horarios, carpe
             gestor_horarios.eliminar_contraturno(identificador, curso)
         except KeyError:
             return jsonify({"ok": False, "mensaje": "Contraturno no encontrado"}), 404
+        except ValueError as exc:
+            return jsonify({"ok": False, "mensaje": str(exc)}), 403
         return jsonify({"ok": True})
 
     @bp.route("/admin/api/contraturnos/<identificador>/activar", methods=["POST"])
@@ -271,6 +277,9 @@ def create_blueprint(gestor_rostros, registro_asistencia, gestor_horarios, carpe
                 registro = gestor_horarios.crear_contraturno(curso, dia, hora, tolerancia)
         except KeyError:
             return jsonify({"ok": False, "mensaje": "Contraturno no encontrado"}), 404
+        except ValueError as exc:
+            # Captura el error de contraturnos permanentes
+            return jsonify({"ok": False, "mensaje": str(exc)}), 403
         except (TypeError, ValueError):
             return jsonify({"ok": False, "mensaje": "Revisá la hora y la tolerancia (0 a 120)"}), 400
         return jsonify({"ok": True, "contraturno": registro})
