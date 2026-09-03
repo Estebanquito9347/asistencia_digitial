@@ -8,32 +8,6 @@ import os
 import secrets
 
 
-def _obtener_secret_key() -> str:
-    """
-    Carga o genera una SECRET_KEY persistente.
-    Se guarda en .secret_key para que no se pierda entre reinicios.
-    Esto es crítico para que las cookies de sesión sigan siendo válidas
-    después de reiniciar el servidor.
-    """
-    archivo_secret = ".secret_key"
-    if os.path.exists(archivo_secret):
-        try:
-            with open(archivo_secret, "r") as f:
-                return f.read().strip()
-        except Exception:
-            pass
-    
-    # Si no existe o hay error, generar uno nuevo y guardarlo
-    secret = secrets.token_hex(32)
-    try:
-        with open(archivo_secret, "w") as f:
-            f.write(secret)
-    except Exception:
-        # Si no se puede guardar (permisos), al menos funciona esta sesión
-        pass
-    return secret
-
-
 class Config:
     # --- Rutas de datos ---
     CARPETA_ROSTROS = os.environ.get("CARPETA_ROSTROS", "rostros")
@@ -46,13 +20,16 @@ class Config:
     FACE_MARGEN_MINIMO = float(os.environ.get("FACE_MARGEN_MINIMO", "0.04"))
     FACE_ESCALA_DETECCION = float(os.environ.get("FACE_ESCALA_DETECCION", "0.5"))
 
+    # --- Lector de huella en red (ZKTeco / pyzk) ---
+    HUELLA_RED_IP = os.environ.get("HUELLA_RED_IP", "192.168.120.37")
+    HUELLA_RED_PUERTO = int(os.environ.get("HUELLA_RED_PUERTO", "4370"))
+    HUELLA_RED_PASSWORD = int(os.environ.get("HUELLA_RED_PASSWORD", "0"))
+    HUELLA_RED_TIMEOUT = int(os.environ.get("HUELLA_RED_TIMEOUT", "5"))
+    ARCHIVO_MAPEO_HUELLA_RED = os.environ.get("ARCHIVO_MAPEO_HUELLA_RED", "huella_red_mapeo.json")
+
     # --- Panel de la preceptora ---
-    # Cambiar el PIN por defecto antes de usar esto con alumnos reales.
     ADMIN_PIN = os.environ.get("ADMIN_PIN", "1234")
-    # SECRET_KEY persistente: se guarda en disco para que las cookies
-    # sigan siendo válidas después de reiniciar el servidor.
-    # Esto es especialmente importante en Linux donde se ejecuta la web.
-    SECRET_KEY = os.environ.get("SECRET_KEY", _obtener_secret_key())
+    SECRET_KEY = os.environ.get("SECRET_KEY", secrets.token_hex(32))
 
     # --- Servidor ---
     HOST = os.environ.get("HOST", "0.0.0.0")

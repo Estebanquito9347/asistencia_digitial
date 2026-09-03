@@ -11,8 +11,14 @@ Guarda la asistencia organizada por curso:
     │   └── 2026-08-26.csv
     └── ...
 
-El "Estado" (PRESENTE/TARDE) lo calcula quien llama (routes/api.py,
-usando GestorHorarios) — este módulo solo persiste.
+El "Estado" (PRESENTE/TARDE) y el "Turno" los calcula quien llama
+(routes/api.py, usando GestorHorarios) — este módulo solo persiste.
+
+`registrar_presente` acepta un `momento` opcional: la cámara lo deja
+en None (usa "ahora"), pero la sincronización del lector de huella en
+red SÍ lo pasa explícito — las marcaciones que baja el dispositivo
+ya pasaron antes, no en el instante de sincronizar, y hay que guardar
+la hora real de la fichada, no la de la sincronización.
 """
 
 import logging
@@ -24,7 +30,7 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-COLUMNAS = ["Fecha", "Hora", "Alumno", "Curso", "Estado"]
+COLUMNAS = ["Fecha", "Hora", "Alumno", "Curso", "Turno", "Estado"]
 
 
 class RegistroAsistencia:
@@ -37,29 +43,33 @@ class RegistroAsistencia:
         os.makedirs(carpeta_curso, exist_ok=True)
         return os.path.join(carpeta_curso, f"{fecha}.csv")
 
-    def registrar_presente(self, alumno: str, curso: str, estado: str) -> bool:
-        ahora = datetime.now()
-        fecha = ahora.strftime("%Y-%m-%d")
-        hora = ahora.strftime("%H:%M:%S")
+    def registrar_presente(self, alumno: str, curso: str, turno: str, estado: str,
+                            momento: datetime = None) -> bool:
+        momento = momento or datetime.now()
+        fecha = momento.strftime("%Y-%m-%d")
+        hora = momento.strftime("%H:%M:%S")
         ruta = self._ruta_archivo(curso, fecha)
 
         fila_nueva = pd.DataFrame([{
-            "Fecha": fecha, "Hora": hora, "Alumno": alumno, "Curso": curso, "Estado": estado,
+            "Fecha": fecha, "Hora": hora, "Alumno": alumno, "Curso": curso, "Turno": turno, "Estado": estado,
         }], columns=COLUMNAS)
 
         with self._lock:
             if not os.path.exists(ruta):
                 fila_nueva.to_csv(ruta, index=False, sep=";")
-                logger.info("Asistencia creada para %s. Primer registro: %s - %s", curso, alumno, estado)
+                logger.info("Asistencia creada para %s. Primer registro: %s - %s (%s)", curso, alumno, estado, turno)
                 return True
 
             df = pd.read_csv(ruta, sep=";")
-            if (df["Alumno"] == alumno).any():
-                logger.debug("Duplicado ignorado: %s ya tiene registro hoy en %s", alumno, curso)
+            # Duplicado por (Alumno, Turno): un alumno puede tener DOS
+            # registros legítimos el mismo día si el curso tiene turno
+            # y contraturno.
+            if ((df["Alumno"] == alumno) & (df["Turno"] == turno)).any():
+                logger.debug("Duplicado ignorado: %s ya tiene registro hoy en %s (%s)", alumno, curso, turno)
                 return False
 
             fila_nueva.to_csv(ruta, mode="a", header=False, index=False, sep=";")
-            logger.info("Registrado: %s (%s) - %s", alumno, curso, estado)
+            logger.info("Registrado: %s (%s) - %s (%s)", alumno, curso, estado, turno)
             return True
 
     def ruta_para(self, curso: str, fecha: str):
@@ -73,7 +83,6 @@ class RegistroAsistencia:
                 if os.path.isdir(os.path.join(self.carpeta_asistencia, d))]
 
     def registros_de_hoy(self, curso: str = None) -> list:
-        """Si curso es None, junta los registros de HOY de todos los cursos."""
         fecha_hoy = datetime.now().strftime("%Y-%m-%d")
         cursos = [curso] if curso else self._listar_cursos_con_carpeta()
 
@@ -92,7 +101,6 @@ class RegistroAsistencia:
         return registros
 
     def resumen_del_dia(self) -> list:
-        """Cantidad de presentes por curso, para un vistazo rápido en el panel."""
         fecha_hoy = datetime.now().strftime("%Y-%m-%d")
         resultado = []
 

@@ -1,17 +1,16 @@
 """
 routes/api.py
 --------------
-Dos superficies separadas:
+Tres superficies:
 
-  - Kiosco público ("/"): cámara + confirmación. Es lo único que ve
-    el alumno. No tiene ningún link ni forma de llegar al panel de
-    la preceptora desde acá.
-
-  - Panel de la preceptora ("/admin"): registros de asistencia del
-    día y configuración de horarios por curso. Protegido por PIN
-    (ver core/autenticacion.py) — no es un sistema de usuarios
-    completo, pero alcanza para que un alumno curioso en el kiosco
-    no pueda tocar nada de esto.
+  - Kiosco público ("/"): cámara + confirmación, lo único que ve el
+    alumno.
+  - Panel de la preceptora ("/admin"): registros, horarios, descarga
+    de CSV por curso. Protegido por PIN.
+  - Endpoints del lector de huella en red ("/api/..."): conectar y
+    sincronizar el terminal ZKTeco. También protegidos por PIN — es
+    una operación administrativa (toca hardware compartido y escribe
+    en los mismos CSV de asistencia), no algo que el alumno dispare.
 """
 
 import base64
@@ -41,7 +40,8 @@ def _decodificar_frame(imagen_raw: str):
     return cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
 
 
-def create_blueprint(gestor_rostros, registro_asistencia, gestor_horarios, carpeta_rostros, admin_pin):
+def create_blueprint(gestor_rostros, registro_asistencia, gestor_horarios, gestor_huella_red,
+                      carpeta_rostros, admin_pin):
     bp = Blueprint("api", __name__)
 
     # ==================================================================
@@ -82,8 +82,9 @@ def create_blueprint(gestor_rostros, registro_asistencia, gestor_horarios, carpe
 
     @bp.route("/confirmar_asistencia", methods=["POST"])
     def confirmar_asistencia():
-        """El alumno tocó 'Sí, soy yo'. Acá SÍ se escribe al CSV, con el
-        estado (PRESENTE/TARDE) calculado según el horario del curso."""
+        """El alumno tocó 'Sí, soy yo'. Mismo camino que usa la
+        sincronización del lector de huella: RegistroAsistencia +
+        GestorHorarios, terminan en el mismo CSV."""
         data = request.get_json(silent=True) or {}
         alumno = (data.get("alumno") or "").strip()
         curso = (data.get("curso") or "").strip()
@@ -91,12 +92,15 @@ def create_blueprint(gestor_rostros, registro_asistencia, gestor_horarios, carpe
         if not alumno or not curso:
             return jsonify({"ok": False, "mensaje": "Faltan 'alumno' o 'curso'"}), 400
 
-        estado = gestor_horarios.calcular_estado(curso, datetime.now())
-        registrado = registro_asistencia.registrar_presente(alumno, curso, estado)
-        return jsonify({"ok": True, "registrado": registrado, "estado": estado})
+        resultado_horario = gestor_horarios.calcular_estado(curso, datetime.now())
+        registrado = registro_asistencia.registrar_presente(
+            alumno, curso, resultado_horario["turno"], resultado_horario["estado"]
+        )
+        return jsonify({"ok": True, "registrado": registrado, "estado": resultado_horario["estado"],
+                         "turno": resultado_horario["turno"]})
 
     # ==================================================================
-    # LOGIN — separa el kiosco del panel de la preceptora
+    # LOGIN
     # ==================================================================
     @bp.route("/login", methods=["GET", "POST"])
     def login():
@@ -140,42 +144,9 @@ def create_blueprint(gestor_rostros, registro_asistencia, gestor_horarios, carpe
             cursos = sorted(d for d in os.listdir(carpeta_rostros) if os.path.isdir(os.path.join(carpeta_rostros, d)))
 
         horarios_guardados = gestor_horarios.obtener_todos()
-        hoy = datetime.now().date()
-        resultado = {}
-        for curso in cursos:
-            efectivo = gestor_horarios.obtener(curso, hoy)
-            habitual = gestor_horarios.obtener(curso)
-            contraturno = gestor_horarios.obtener_contraturno(curso)
-            cfg = gestor_horarios.obtener_todos().get(curso, {})
-            resultado[curso] = {
-                **efectivo,
-                "hora_habitual": habitual["hora_entrada"],
-                "tolerancia_habitual": habitual["tolerancia_minutos"],
-                "hora_contraturno": contraturno["hora_entrada"],
-                "tolerancia_contraturno": contraturno["tolerancia_minutos"],
-                "modo_hoy": ("contraturno" if (
-                    isinstance(cfg, dict) and
-                    cfg.get("cambios", {}).get(hoy.strftime("%Y-%m-%d"), {}).get("tipo")
-                    in ("contraturno", "contraturno_id")
-                ) else None),
-                "modificado_hoy": efectivo != habitual,
-            }
-        # Por si hay horarios guardados de cursos que ya no tienen carpeta
-        # (cambiaron de nombre, etc.) — los mostramos igual para no perder
-        # la configuración silenciosamente.
+        resultado = {curso: gestor_horarios.obtener(curso) for curso in cursos}
         for curso, cfg in horarios_guardados.items():
-            habitual_cfg = cfg.get("habitual", cfg)
-            contraturno_cfg = cfg.get("contraturno", habitual_cfg)
-            cambio_hoy = cfg.get("cambios", {}).get(hoy.strftime("%Y-%m-%d"), {})
-            resultado.setdefault(curso, {
-                **gestor_horarios.obtener(curso, hoy),
-                "hora_habitual": habitual_cfg.get("hora_entrada", "07:20"),
-                "tolerancia_habitual": habitual_cfg.get("tolerancia_minutos", 10),
-                "hora_contraturno": contraturno_cfg.get("hora_entrada", "07:20"),
-                "tolerancia_contraturno": contraturno_cfg.get("tolerancia_minutos", 10),
-                "modo_hoy": cambio_hoy.get("tipo"),
-                "modificado_hoy": bool(cambio_hoy),
-            })
+            resultado.setdefault(curso, cfg)
 
         return jsonify({"horarios": resultado})
 
@@ -184,105 +155,36 @@ def create_blueprint(gestor_rostros, registro_asistencia, gestor_horarios, carpe
     def admin_guardar_horario():
         data = request.get_json(silent=True) or {}
         curso = (data.get("curso") or "").strip()
-        hora_entrada = (data.get("hora_entrada") or "").strip()
-        tolerancia_minutos = data.get("tolerancia_minutos", 10)
-        # Las llamadas antiguas siguen guardando el horario habitual;
-        # la interfaz nueva envía False explícitamente para un cambio de hoy.
-        guardar_habitual = bool(data.get("guardar_habitual", True))
-        accion = data.get("accion", "habitual" if guardar_habitual else "especial")
+        turno = data.get("turno")
+        contraturno = data.get("contraturno")
 
-        if accion in ("activar_normal", "activar_contraturno"):
-            try:
-                gestor_horarios.activar_modo(
-                    curso, "normal" if accion == "activar_normal" else "contraturno",
-                    fecha=datetime.now().date()
-                )
-            except ValueError as exc:
-                return jsonify({"ok": False, "mensaje": str(exc)}), 400
-            return jsonify({"ok": True})
-
-        if not hora_entrada:
-            return jsonify({"ok": False, "mensaje": "Faltan 'curso' o 'hora_entrada'"}), 400
+        if not curso or not turno:
+            return jsonify({"ok": False, "mensaje": "Faltan 'curso' o 'turno'"}), 400
 
         try:
-            gestor_horarios.establecer(
-                curso, hora_entrada, int(tolerancia_minutos),
-                fecha=datetime.now().date(), habitual=accion == "habitual",
-                modo="contraturno" if accion == "contraturno" else "especial"
-            )
-        except (TypeError, ValueError):
-            return jsonify({"ok": False, "mensaje": "Revisá la hora (HH:MM) y una tolerancia entre 0 y 120"}), 400
+            gestor_horarios.establecer(curso, turno, contraturno)
+        except (ValueError, KeyError):
+            return jsonify({"ok": False, "mensaje": "Formato de horario inválido (hora_entrada debe ser HH:MM)"}), 400
 
         return jsonify({"ok": True})
 
-    @bp.route("/admin/api/contraturnos", methods=["GET"])
+    @bp.route("/admin/api/horarios/aplicar_multiple", methods=["POST"])
     @requiere_admin
-    def admin_obtener_contraturnos():
-        contraturnos = gestor_horarios.obtener_contraturnos()
-        # Añadir flag de permanencia para la interfaz
-        for c in contraturnos:
-            c["permanente"] = c.get("permanente", False)
-        return jsonify({"contraturnos": contraturnos})
-
-    @bp.route("/admin/api/contraturnos", methods=["POST"])
-    @requiere_admin
-    def admin_crear_contraturno():
-        return _guardar_contraturno()
-
-    @bp.route("/admin/api/contraturnos/<identificador>", methods=["PUT"])
-    @requiere_admin
-    def admin_actualizar_contraturno(identificador):
-        return _guardar_contraturno(identificador)
-
-    @bp.route("/admin/api/contraturnos/<identificador>", methods=["DELETE"])
-    @requiere_admin
-    def admin_eliminar_contraturno(identificador):
+    def admin_aplicar_horario_multiple():
         data = request.get_json(silent=True) or {}
-        curso = (data.get("curso") or "").strip()
-        try:
-            gestor_horarios.eliminar_contraturno(identificador, curso)
-        except KeyError:
-            return jsonify({"ok": False, "mensaje": "Contraturno no encontrado"}), 404
-        except ValueError as exc:
-            return jsonify({"ok": False, "mensaje": str(exc)}), 403
-        return jsonify({"ok": True})
+        cursos = data.get("cursos") or []
+        turno = data.get("turno")
+        contraturno = data.get("contraturno")
 
-    @bp.route("/admin/api/contraturnos/<identificador>/activar", methods=["POST"])
-    @requiere_admin
-    def admin_activar_contraturno(identificador):
-        data = request.get_json(silent=True) or {}
-        curso = (data.get("curso") or "").strip()
-        try:
-            gestor_horarios.activar_contraturno_registro(
-                identificador, curso, fecha=datetime.now().date()
-            )
-        except KeyError:
-            return jsonify({"ok": False, "mensaje": "Contraturno no encontrado"}), 404
-        return jsonify({"ok": True})
+        if not cursos or not turno:
+            return jsonify({"ok": False, "mensaje": "Faltan 'cursos' o 'turno'"}), 400
 
-    def _guardar_contraturno(identificador=None):
-        data = request.get_json(silent=True) or {}
-        curso = (data.get("curso") or "").strip()
-        dia = (data.get("dia") or "").strip().lower()
-        hora = (data.get("hora_entrada") or "").strip()
-        tolerancia = data.get("tolerancia_minutos", 10)
-        if not curso or dia not in ("lunes", "martes", "miércoles", "jueves", "viernes"):
-            return jsonify({"ok": False, "mensaje": "Elegí un curso y un día válido"}), 400
         try:
-            if identificador:
-                registro = gestor_horarios.actualizar_contraturno(
-                    identificador, curso, dia, hora, tolerancia
-                )
-            else:
-                registro = gestor_horarios.crear_contraturno(curso, dia, hora, tolerancia)
-        except KeyError:
-            return jsonify({"ok": False, "mensaje": "Contraturno no encontrado"}), 404
-        except ValueError as exc:
-            # Captura el error de contraturnos permanentes
-            return jsonify({"ok": False, "mensaje": str(exc)}), 403
-        except (TypeError, ValueError):
-            return jsonify({"ok": False, "mensaje": "Revisá la hora y la tolerancia (0 a 120)"}), 400
-        return jsonify({"ok": True, "contraturno": registro})
+            gestor_horarios.establecer_multiple(cursos, turno, contraturno)
+        except (ValueError, KeyError):
+            return jsonify({"ok": False, "mensaje": "Formato de horario inválido (hora_entrada debe ser HH:MM)"}), 400
+
+        return jsonify({"ok": True, "cursos_actualizados": len(cursos)})
 
     @bp.route("/admin/descargar_asistencia/<curso>")
     @requiere_admin
@@ -299,5 +201,89 @@ def create_blueprint(gestor_rostros, registro_asistencia, gestor_horarios, carpe
         forzar = bool((request.get_json(silent=True) or {}).get("forzar", False))
         gestor_rostros.entrenar(forzar=forzar)
         return jsonify({"ok": True, "alumnos_cargados": len(gestor_rostros.nombres_rostros)})
+
+    # ==================================================================
+    # LECTOR DE HUELLA EN RED (ZKTeco) — protegido, igual que el resto
+    # de operaciones administrativas
+    # ==================================================================
+    @bp.route("/api/conectar-lector", methods=["GET"])
+    @requiere_admin
+    def api_conectar_lector():
+        return jsonify(gestor_huella_red.conectar())
+
+    @bp.route("/admin/api/huella_red/usuarios", methods=["GET"])
+    @requiere_admin
+    def admin_huella_red_usuarios():
+        """Usuarios cargados en el dispositivo — para que la preceptora
+        vea qué user_id corresponde a qué persona y arme el mapeo."""
+        try:
+            return jsonify({"usuarios": gestor_huella_red.obtener_usuarios_dispositivo()})
+        except Exception as e:
+            logger.exception("Error obteniendo usuarios del lector de huella")
+            return jsonify({"ok": False, "mensaje": str(e)}), 502
+
+    @bp.route("/admin/api/huella_red/mapeo", methods=["POST"])
+    @requiere_admin
+    def admin_huella_red_mapeo():
+        """Asocia un user_id del dispositivo con un alumno (nombre + curso)
+        de nuestra app. Sin esto, sus marcaciones llegan sin poder
+        identificarse (ver /api/sincronizar-asistencia)."""
+        data = request.get_json(silent=True) or {}
+        user_id = data.get("user_id")
+        nombre = (data.get("nombre") or "").strip()
+        curso = (data.get("curso") or "").strip()
+
+        if user_id is None or not nombre or not curso:
+            return jsonify({"ok": False, "mensaje": "Faltan 'user_id', 'nombre' o 'curso'"}), 400
+
+        gestor_huella_red.registrar_mapeo(user_id, nombre, curso)
+        return jsonify({"ok": True})
+
+    @bp.route("/api/sincronizar-asistencia", methods=["POST"])
+    @requiere_admin
+    def api_sincronizar_asistencia():
+        """Descarga las marcaciones del lector y las escribe en
+        asistencia/<curso>/<fecha>.csv — el MISMO archivo y el mismo
+        cálculo de estado (PRESENTE/TARDE vía GestorHorarios) que usa
+        la cámara. Es la unificación pedida: no importa si vino de la
+        cara o del dedo, termina en el mismo historial.
+
+        Las marcaciones de un user_id sin mapear NO se pierden: se
+        devuelven en 'sin_mapear' para que la preceptora las resuelva
+        desde /admin/api/huella_red/mapeo y vuelva a sincronizar.
+        """
+        limpiar = bool((request.get_json(silent=True) or {}).get("limpiar_dispositivo", False))
+
+        try:
+            marcaciones = gestor_huella_red.obtener_marcaciones(limpiar_dispositivo=limpiar)
+        except Exception as e:
+            logger.exception("Error sincronizando con el lector de huella")
+            return jsonify({"ok": False, "mensaje": str(e)}), 502
+
+        registradas, duplicadas, sin_mapear = 0, 0, []
+
+        for m in marcaciones:
+            if not m["alumno"] or not m["curso"]:
+                sin_mapear.append(m["user_id"])
+                continue
+
+            momento = m["timestamp"]  # datetime real de la fichada, no el de ahora
+            resultado_horario = gestor_horarios.calcular_estado(m["curso"], momento)
+            registrado = registro_asistencia.registrar_presente(
+                m["alumno"], m["curso"], resultado_horario["turno"], resultado_horario["estado"],
+                momento=momento,
+            )
+            if registrado:
+                registradas += 1
+            else:
+                duplicadas += 1
+
+        return jsonify({
+            "ok": True,
+            "total_marcaciones": len(marcaciones),
+            "registradas": registradas,
+            "duplicadas": duplicadas,
+            "sin_mapear": sorted(set(sin_mapear)),
+        })
 
     return bp
