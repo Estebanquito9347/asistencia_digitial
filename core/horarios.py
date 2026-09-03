@@ -10,6 +10,10 @@ de datos para esto todavía.
 
 Los contraturnos pueden marcarse como "permanente": true para que no 
 puedan ser editados ni eliminados desde la interfaz.
+
+Sincronización NTP:
+- Se sincroniza automáticamente con un servidor NTP al iniciar
+- Asegura que la hora sea precisa incluso en sistemas sin reloj exacto
 """
 
 import json
@@ -18,6 +22,7 @@ import os
 import threading
 import uuid
 from datetime import datetime, timedelta, time as time_cls
+import socket
 
 logger = logging.getLogger(__name__)
 
@@ -25,12 +30,70 @@ DEFAULT_HORA_ENTRADA_MANANA = "07:20"
 DEFAULT_HORA_ENTRADA_TARDE = "13:20"
 DEFAULT_TOLERANCIA_MIN = 10
 
+# Servidores NTP públicos
+SERVIDORES_NTP = [
+    "pool.ntp.org",
+    "time.nist.gov",
+    "time.google.com",
+]
+
+
+def obtener_hora_ntp() -> datetime:
+    """
+    Obtiene la hora actual desde un servidor NTP.
+    Si falla, devuelve la hora local del sistema.
+    """
+    import struct
+    
+    for servidor in SERVIDORES_NTP:
+        try:
+            cliente = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            cliente.settimeout(2)
+            
+            # Datos NTP: versión 3, modo cliente
+            datos = b'\x1b' + (47 * b'\0')
+            cliente.sendto(datos, (servidor, 123))
+            
+            respuesta, _ = cliente.recvfrom(1024)
+            cliente.close()
+            
+            # Parsear respuesta NTP (timestamp en segundos desde 1900)
+            timestamp = struct.unpack('!12I', respuesta)[10]
+            # Convertir a época Unix (resta 70 años)
+            timestamp_unix = timestamp - 2208988800
+            return datetime.fromtimestamp(timestamp_unix)
+            
+        except Exception as e:
+            logger.warning(f"No se pudo obtener hora de {servidor}: {e}")
+            continue
+    
+    logger.warning("No se pudo sincronizar con NTP, usando hora del sistema")
+    return datetime.now()
+
 
 class GestorHorarios:
-    def __init__(self, archivo_horarios: str):
+    def __init__(self, archivo_horarios: str, sincronizar_ntp: bool = True):
         self.archivo_horarios = archivo_horarios
         self._lock = threading.Lock()
         self._horarios = self._cargar()
+        self._hora_ajuste = timedelta(0)
+        
+        if sincronizar_ntp:
+            self._sincronizar_ntp()
+    
+    def _sincronizar_ntp(self) -> None:
+        """Sincroniza la hora con un servidor NTP."""
+        try:
+            hora_ntp = obtener_hora_ntp()
+            hora_local = datetime.now()
+            self._hora_ajuste = hora_ntp - hora_local
+            logger.info(f"Sincronización NTP exitosa. Ajuste: {self._hora_ajuste.total_seconds()}s")
+        except Exception as e:
+            logger.error(f"Error al sincronizar NTP: {e}")
+    
+    def obtener_hora_actual(self) -> datetime:
+        """Devuelve la hora actual sincronizada con NTP."""
+        return datetime.now() + self._hora_ajuste
 
     def _cargar(self) -> dict:
         if os.path.exists(self.archivo_horarios):
@@ -110,16 +173,33 @@ class GestorHorarios:
         return resultado
 
     def obtener_contraturno(self, curso: str, fecha=None) -> dict:
+        """
+        Obtiene el contraturno para un curso en una fecha específica.
+        Valida que el día del contraturno coincida con el día de la fecha.
+        """
         cfg = self._horarios.get(curso, self._predeterminado(curso))
         registros = self.obtener_contraturnos(curso)
         dias = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
-        dia = dias[fecha.weekday()] if hasattr(fecha, "weekday") else None
+        
+        # Usar fecha actual sincronizada con NTP
+        if fecha is None:
+            fecha = self.obtener_hora_actual().date()
+        
+        dia_actual = dias[fecha.weekday()] if hasattr(fecha, "weekday") else None
+        
+        # Buscar contraturno que coincida con el día actual
         for registro in registros:
-            if registro.get("dia") in (dia, "todos"):
+            dia_contraturno = registro.get("dia", "").lower().strip()
+            
+            # Validar que el día del contraturno coincida con el día actual
+            if dia_contraturno in (dia_actual, "todos"):
+                logger.debug(f"Contraturno activo para {curso} el {dia_actual}: {registro['hora_entrada']}")
                 return {
                     "hora_entrada": registro["hora_entrada"],
                     "tolerancia_minutos": registro["tolerancia_minutos"],
                 }
+        
+        # Si no hay contraturno para hoy, devolver horario habitual
         if "habitual" not in cfg:
             return dict(cfg)
         return dict(cfg.get("contraturno", cfg["habitual"]))
@@ -134,10 +214,11 @@ class GestorHorarios:
     def crear_contraturno(self, curso: str, dia: str, hora_entrada: str,
                           tolerancia_minutos: int) -> dict:
         self._validar_horario(hora_entrada, tolerancia_minutos)
+        self._validar_dia(dia)
         registro = {
             "id": uuid.uuid4().hex,
             "curso": curso,
-            "dia": dia,
+            "dia": dia.lower().strip(),
             "hora_entrada": hora_entrada,
             "tolerancia_minutos": int(tolerancia_minutos),
         }
@@ -148,6 +229,7 @@ class GestorHorarios:
             })
             cfg.setdefault("contraturnos", []).append(registro)
             self._guardar()
+        logger.info(f"Contraturno creado para {curso} el {dia}: {hora_entrada}")
         return registro
 
     def actualizar_contraturno(self, identificador: str, curso: str, dia: str,
@@ -156,11 +238,12 @@ class GestorHorarios:
             raise ValueError("No se puede modificar un contraturno permanente")
         
         self._validar_horario(hora_entrada, tolerancia_minutos)
+        self._validar_dia(dia)
         with self._lock:
             for registro in self.obtener_contraturnos(curso):
                 if registro.get("id") == identificador:
                     registro.update({
-                        "dia": dia, "hora_entrada": hora_entrada,
+                        "dia": dia.lower().strip(), "hora_entrada": hora_entrada,
                         "tolerancia_minutos": int(tolerancia_minutos),
                     })
                     self._horarios[curso].setdefault("contraturnos", [])
@@ -169,6 +252,7 @@ class GestorHorarios:
                         if actual.get("id") == identificador:
                             reemplazar[indice] = registro
                     self._guardar()
+                    logger.info(f"Contraturno actualizado para {curso}: {dia} {hora_entrada}")
                     return registro
         raise KeyError("Contraturno no encontrado")
 
@@ -184,6 +268,7 @@ class GestorHorarios:
                 raise KeyError("Contraturno no encontrado")
             cfg["contraturnos"] = nuevos
             self._guardar()
+            logger.info(f"Contraturno eliminado para {curso}")
 
     def activar_contraturno_registro(self, identificador: str, curso: str, fecha=None) -> None:
         if not any(r.get("id") == identificador for r in self.obtener_contraturnos(curso)):
@@ -203,6 +288,13 @@ class GestorHorarios:
         datetime.strptime(hora_entrada, "%H:%M")
         if int(tolerancia_minutos) < 0 or int(tolerancia_minutos) > 120:
             raise ValueError("La tolerancia debe estar entre 0 y 120 minutos")
+
+    @staticmethod
+    def _validar_dia(dia: str) -> None:
+        """Valida que el día sea uno válido de la semana."""
+        dias_validos = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo", "todos")
+        if dia.lower().strip() not in dias_validos:
+            raise ValueError(f"Día inválido. Debe ser uno de: {', '.join(dias_validos)}")
 
     @staticmethod
     def _fecha_str(fecha) -> str:
@@ -271,8 +363,11 @@ class GestorHorarios:
             self._horarios[curso] = actual
             self._guardar()
 
-    def calcular_estado(self, curso: str, momento: datetime) -> str:
+    def calcular_estado(self, curso: str, momento: datetime = None) -> str:
         """Devuelve 'PRESENTE' o 'TARDE' según el horario configurado del curso."""
+        if momento is None:
+            momento = self.obtener_hora_actual()
+        
         cfg = self.obtener(curso, momento.date())
         hora_entrada = datetime.strptime(cfg["hora_entrada"], "%H:%M").time()
         limite = (
