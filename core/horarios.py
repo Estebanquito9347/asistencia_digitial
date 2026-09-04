@@ -214,37 +214,58 @@ class GestorHorarios:
     # ------------------------------------------------------------------
     # Cálculo de estado al tomar asistencia
     # ------------------------------------------------------------------
-    def calcular_estado(self, curso: str, momento: datetime) -> dict:
-        """Devuelve {'turno': <nombre de la franja vigente>, 'estado': 'PRESENTE'|'TARDE'}.
-        'turno' es 'Habitual' o el nombre de la materia (contraturno)
-        si hoy corresponde y ya empezó."""
+    def _elegir_franja_vigente(self, curso: str, momento: datetime):
+        """Lógica compartida entre calcular_estado() y franja_vigente():
+        arma los candidatos de hoy (habitual + contraturnos de hoy que NO hayan terminado) y
+        elige el más reciente que ya empezó, o el próximo si ninguno
+        empezó todavía."""
         cfg = self.obtener(curso)
         dia_hoy = _dia_de_hoy(momento)
 
+        # El turno habitual SIEMPRE es el candidato por defecto
         candidatos = [("Habitual", cfg["turno_habitual"])]
+        
         for c in cfg["contraturnos"]:
             if dia_hoy in c["dias"]:
-                candidatos.append((c["materia"], c))
+                # NUEVO: Verificamos que el contraturno no haya terminado su franja
+                hora_fin = datetime.strptime(c["hora_fin"], "%H:%M").time()
+                limite_fin = (datetime.combine(momento.date(), hora_fin) + timedelta(minutes=c["tolerancia_minutos"])).time()
+                
+                # Si el momento actual es anterior al fin del contraturno, es válido
+                if momento.time() <= limite_fin:
+                    candidatos.append((c["materia"], c))
 
+        # Filtramos cuáles de los candidatos válidos ya empezaron
         vigentes = [
             (nombre, franja) for nombre, franja in candidatos
             if datetime.strptime(self._hora_inicio(franja), "%H:%M").time() <= momento.time()
         ]
 
         if vigentes:
-            nombre, franja = max(
-                vigentes, key=lambda par: datetime.strptime(self._hora_inicio(par[1]), "%H:%M").time()
-            )
-        else:
-            nombre, franja = min(
-                candidatos, key=lambda par: datetime.strptime(self._hora_inicio(par[1]), "%H:%M").time()
-            )
-            return {"turno": nombre, "estado": "PRESENTE"}
+            # Si hay vigentes, elegimos el que empezó más tarde
+            return max(vigentes, key=lambda par: datetime.strptime(self._hora_inicio(par[1]), "%H:%M").time())
+        # Si ninguno empezó, elegimos el próximo que va a empezar
+        return min(candidatos, key=lambda par: datetime.strptime(self._hora_inicio(par[1]), "%H:%M").time())
+
+    def franja_vigente(self, curso: str, momento: datetime) -> str:
+        """Nombre de la franja horaria vigente AHORA MISMO para ese curso
+        ('Habitual' o el nombre de la materia en curso), sin registrar
+        nada ni calcular tardanza — pensado para un panel en tiempo real."""
+        nombre, _franja = self._elegir_franja_vigente(curso, momento)
+        return nombre
+
+    def calcular_estado(self, curso: str, momento: datetime) -> dict:
+        """Devuelve {'turno': <nombre de la franja vigente>, 'estado': 'PRESENTE'|'TARDE'}.
+        'turno' es 'Habitual' o el nombre de la materia (contraturno)
+        si hoy corresponde y ya empezó."""
+        
+        # Ahora usamos la misma lógica unificada
+        nombre, franja = self._elegir_franja_vigente(curso, momento)
 
         hora_inicio = datetime.strptime(self._hora_inicio(franja), "%H:%M").time()
-        limite = (
+        limite_tarde = (
             datetime.combine(momento.date(), hora_inicio) + timedelta(minutes=franja["tolerancia_minutos"])
         ).time()
 
-        estado = "PRESENTE" if momento.time() <= limite else "TARDE"
+        estado = "PRESENTE" if momento.time() <= limite_tarde else "TARDE"
         return {"turno": nombre, "estado": estado}

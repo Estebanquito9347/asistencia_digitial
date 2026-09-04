@@ -1,21 +1,8 @@
 """
 core/reconocimiento_facial.py
 ------------------------------
-Vuelta a dlib/face_recognition: es la combinación con la que
-identificábamos gente de forma confiable. El experimento con LBP
-casero (para evitar dlib en Windows) quedó con temas de calibración
-de escala que no vale la pena seguir persiguiendo ahora — mejor
-retomar eso más adelante, específicamente para el build de Windows,
-en vez de arrastrar el problema acá.
-
-Incluye lo que ya habíamos afinado:
-  - Cache en disco (pickle) invalidado por mtime de archivo: no
-    recorre dlib entero en cada reinicio del servidor.
-  - Selección de la cara más grande cuando una foto de entrenamiento
-    tiene más de un rostro detectado.
-  - Detección con downscale (más rápido) y encoding sobre el frame
-    original reescalado (sin perder precisión).
-  - Margen anti-ambigüedad entre el 1er y 2do candidato más cercano.
+dlib/face_recognition, con cache en disco, margen anti-ambigüedad y
+detección con downscale.
 """
 
 import logging
@@ -44,9 +31,6 @@ class GestorRostros:
 
         self._cache: dict = {}
 
-    # ------------------------------------------------------------------
-    # Entrenamiento
-    # ------------------------------------------------------------------
     def entrenar(self, forzar: bool = False) -> None:
         self._cache = {} if forzar else self._cargar_cache()
 
@@ -130,9 +114,6 @@ class GestorRostros:
         top, right, bottom, left = ubicacion
         return (right - left) * (bottom - top)
 
-    # ------------------------------------------------------------------
-    # Cache en disco
-    # ------------------------------------------------------------------
     def _cargar_cache(self) -> dict:
         if os.path.exists(self.archivo_cache):
             try:
@@ -149,9 +130,15 @@ class GestorRostros:
         except Exception:
             logger.exception("No se pudo guardar el cache de rostros.")
 
-    # ------------------------------------------------------------------
-    # Búsqueda
-    # ------------------------------------------------------------------
+    def alumnos_de_curso(self, curso: str) -> list:
+        """Nombres únicos de alumnos entrenados para ese curso (deduplicado,
+        por si hay más de una foto por alumno). Sirve para saber el total
+        del curso y poder calcular quiénes faltan en el panel en vivo."""
+        return sorted({
+            nombre for nombre, c in zip(self.nombres_rostros, self.cursos_rostros)
+            if c == curso
+        })
+
     def buscar_en_frame(self, rgb_frame: np.ndarray, curso_esperado: str = None) -> dict:
         if not self.rostros_codificados:
             return {"detectado": False}

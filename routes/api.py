@@ -136,6 +136,37 @@ def create_blueprint(gestor_rostros, registro_asistencia, gestor_horarios, gesto
     def admin_resumen():
         return jsonify({"cursos": registro_asistencia.resumen_del_dia()})
 
+    @bp.route("/admin/api/tiempo_real", methods=["GET"])
+    @requiere_admin
+    def admin_tiempo_real():
+        """Para cada curso: qué franja está pasando AHORA (según el
+        horario), cuántos alumnos hay en total, cuántos ya se presentaron
+        para esa franja puntual, y quiénes faltan. Pensado para dejar
+        abierto y actualizándose solo mientras entran los alumnos."""
+        ahora = datetime.now()
+        cursos = []
+        if os.path.exists(carpeta_rostros):
+            cursos = sorted(d for d in os.listdir(carpeta_rostros) if os.path.isdir(os.path.join(carpeta_rostros, d)))
+
+        resultado = []
+        for curso in cursos:
+            turno_vigente = gestor_horarios.franja_vigente(curso, ahora)
+            alumnos = gestor_rostros.alumnos_de_curso(curso)
+            registros_hoy = registro_asistencia.registros_de_hoy(curso=curso)
+
+            presentes_nombres = {r["Alumno"] for r in registros_hoy if r.get("Turno") == turno_vigente}
+            ausentes = [a for a in alumnos if a not in presentes_nombres]
+
+            resultado.append({
+                "curso": curso,
+                "turno_vigente": turno_vigente,
+                "total_alumnos": len(alumnos),
+                "presentes": len(presentes_nombres),
+                "ausentes": ausentes,
+            })
+
+        return jsonify({"cursos": resultado, "hora_actualizacion": ahora.strftime("%H:%M:%S")})
+
     @bp.route("/admin/api/horarios", methods=["GET"])
     @requiere_admin
     def admin_obtener_horarios():
