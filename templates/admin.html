@@ -10,69 +10,90 @@
 
     <header>
         <h2>🏫 Panel de la Preceptora</h2>
-        <div><a href="/logout" style="color:white;">Cerrar sesión</a></div>
+        <div><a href="/logout" style="color:white; font-weight:bold; text-decoration:none;">Cerrar sesión</a></div>
     </header>
 
-    <div class="container">
-        <!-- Registros del día -->
-        <div class="panel">
-            <h3>📊 Asistencia de hoy</h3>
+    <!-- AGREGAMOS UN CONTENEDOR PRINCIPAL PARA QUE NO SE ESTIRE AL 100% DE LA PANTALLA -->
+    <main class="container container-single" style="max-width: 1000px; margin: 0 auto;">
+        
+        <div class="tabs">
+            <button class="tab-btn activo" id="tabBtnAsistencia" onclick="mostrarTab('asistencia')">📋 Asistencia de hoy</button>
+            <button class="tab-btn" id="tabBtnHorarios" onclick="mostrarTab('horarios')">⏰ Horarios</button>
+        </div>
 
-            <div id="resumenCursos" class="resumen-lista"></div>
+        <!-- ============================== -->
+        <!-- TAB 1: ASISTENCIA              -->
+        <!-- ============================== -->
+        <div id="tabAsistencia" class="tab-contenido">
+            <!-- Usamos "panel" que ya tiene estilos en tu CSS -->
+            <div class="panel">
+                <h3 id="fechaHoy" style="margin-top: 0;">Asistencia de hoy</h3>
 
-            <div class="control-group horario-fila" style="margin-top:15px;">
-                <label>Filtrar / descargar
-                    <select id="filtroCurso">
-                        <option value="">Todos los cursos</option>
-                    </select>
-                </label>
-                <button class="btn-success" onclick="descargarCSV()">📥 Descargar CSV del curso</button>
+                <div id="tarjetasCursos" class="tarjetas-cursos"></div>
+
+                <div class="control-group" style="margin-top:20px;">
+                    <!-- Le ponemos ancho automático al botón para que no ocupe todo -->
+                    <button onclick="reentrenar()" style="width: auto; padding: 10px 20px;">🔄 Actualizar caras reconocidas</button>
+                    <div id="statusAdmin" class="diag-box"></div>
+                </div>
+
+                <h4 id="tituloTabla" style="margin-top: 25px;">Todos los cursos</h4>
+
+                <!-- Botones de filtro por tipo de Turno / Contraturno -->
+                <div style="margin: 15px 0; display: flex; gap: 10px;">
+                    <button class="btn-filtro-turno activo" onclick="filtrarPorTurno('todos', this)"> Todos</button>
+                    <button class="btn-filtro-turno" onclick="filtrarPorTurno('habitual', this)"> Turno Habitual</button>
+                    <button class="btn-filtro-turno" onclick="filtrarPorTurno('contraturno', this)"> Contraturnos</button>
+                </div>
+
+                <div class="tabla-scroll">
+                    <table>
+                        <thead>
+                            <tr><th>Hora</th><th>Alumno</th><th>Curso</th><th>Clase</th><th>Estado</th></tr>
+                        </thead>
+                        <tbody id="tablaRegistros"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================== -->
+        <!-- TAB 2: HORARIOS                -->
+        <!-- ============================== -->
+        <div id="tabHorarios" class="tab-contenido" style="display:none;">
+
+            <div class="panel" style="margin-bottom: 20px;">
+                <h3 style="margin-top: 0;">Aplicar un horario de entrada a varios cursos</h3>
+                <p class="texto-ayuda" style="color: #6b7280; font-size: 14px;">
+                    Por ejemplo: marcá 1°, 2° y 3° y poné una sola vez que entran a las 13:20.
+                </p>
+                <div id="checkboxCursos" class="checkbox-cursos"></div>
+                <div class="fila-horario">
+                    <label>Hora de entrada <input type="time" id="masivoHora" value="08:00"></label>
+                    <label>Tolerancia (minutos) <input type="number" id="masivoTolerancia" value="10" min="0" max="120"></label>
+                    <button onclick="aplicarHorarioMasivo()">Aplicar a los cursos marcados</button>
+                </div>
             </div>
 
-            <button onclick="reentrenar()">🔄 Reentrenar reconocimiento facial</button>
-            <div id="statusAdmin" class="diag-box"></div>
-
-            <div style="max-height: 400px; overflow-y: auto; margin-top: 15px;">
-                <table>
-                    <thead>
-                        <tr><th>Hora</th><th>Alumno</th><th>Curso</th><th>Estado</th></tr>
-                    </thead>
-                    <tbody id="tablaRegistros"></tbody>
-                </table>
+            <div class="panel" style="margin-bottom: 20px;">
+                <h3 style="margin-top: 0;">Horario de cada curso</h3>
+                <p class="texto-ayuda" style="color: #6b7280; font-size: 14px;">
+                    Tocá un curso para ver o cambiar su horario de entrada y sus materias con horario especial.
+                </p>
+                <div id="acordeonCursos"></div>
             </div>
-        </div>
 
-        <!-- Configuración de horarios -->
-        <div class="panel">
-            <h3>⏰ Horarios por curso</h3>
-            <p style="color:#6b7280; font-size:13px;">
-                Cada curso puede tener un horario distinto. Usá
-                <strong>Modificar hoy</strong> cuando haya un cambio puntual;
-                mañana se retoma el horario habitual.
-            </p>
-            <div id="listaHorarios"></div>
-        </div>
+            <div class="panel">
+                <h3 style="margin-top: 0;">Niveles de Inglés</h3>
+                <p class="texto-ayuda" style="color: #6b7280; font-size: 14px;">
+                    ℹ️ Por ahora esto es solo para tener el horario anotado — todavía no está
+                    conectado a la asistencia automática de cada alumno.
+                </p>
+                <div id="listaIngles"></div>
+            </div>
 
-        <div class="panel">
-            <h3>🔁 Contraturnos</h3>
-            <p style="color:#6b7280; font-size:13px;">
-                Agregá, modificá o eliminá los horarios alternativos de cada
-                curso por día de la semana.
-            </p>
-            <form id="formContraturno" class="contraturno-form">
-                <select id="contraturnoCurso" required></select>
-                <select id="contraturnoDia" required>
-                    <option value="lunes">Lunes</option><option value="martes">Martes</option>
-                    <option value="miércoles">Miércoles</option><option value="jueves">Jueves</option>
-                    <option value="viernes">Viernes</option>
-                </select>
-                <input id="contraturnoHora" type="time" required>
-                <input id="contraturnoTolerancia" type="number" min="0" max="120" value="10" required>
-                <button type="submit">Agregar contraturno</button>
-            </form>
-            <div id="listaContraturnos"></div>
         </div>
-    </div>
+    </main>
 
     <script src="{{ url_for('static', filename='admin.js') }}"></script>
 </body>

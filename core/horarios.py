@@ -1,15 +1,33 @@
 """
 core/horarios.py
 ------------------
-Configuración de horario de entrada por curso. Además del horario
-habitual, se pueden guardar cambios puntuales por fecha (por ejemplo,
-si una docente falta y un curso entra más tarde).
+Modelo de horarios de la escuela:
 
-Se guarda en un JSON simple (horarios.json) — no hace falta una base
-de datos para esto todavía.
+  - Cada curso tiene un TURNO HABITUAL: la hora de entrada de todos
+    los días (ej: 1°, 2° y 3° entran a las 13:20; el resto a las 7:15).
 
-Los contraturnos pueden marcarse como "permanente": true para que no 
-puedan ser editados ni eliminados desde la interfaz.
+  - Cada curso puede tener además varios CONTRATURNOS: materias con
+    horario especial, cada una con su propio nombre, los días de la
+    semana en que ocurre, y su horario de inicio/fin. Un curso puede
+    tener muchas — no es "un solo horario alternativo", es una lista
+    (ej: 3°A tiene Ed. Física los lunes Y los jueves, más Historia
+    los martes, cada una con su propio horario).
+
+  - Existen además GRUPOS TRANSVERSALES (por ahora solo informativos):
+    actividades como los Niveles de Inglés, que juntan alumnos de
+    distintos cursos según en qué nivel están, no según su curso base.
+    Se guardan con el mismo formato de horario que un contraturno,
+    pero TODAVÍA NO están conectados al cálculo automático de
+    asistencia — eso requiere poder asignar alumnos individuales a un
+    grupo (algo transversal a los cursos), que es una funcionalidad
+    aparte para más adelante.
+
+Al tomar asistencia, calcular_estado() mira el día de la semana y la
+hora actual, arma la lista de franjas válidas para HOY (el turno
+habitual siempre cuenta, más los contraturnos cuyo día coincide con
+hoy), y elige la más reciente que ya debería haber empezado. Si el
+alumno llega antes de que empiece cualquier franja del día, se toma
+la más próxima y se considera presente (llegó temprano).
 """
 
 import json
@@ -17,265 +35,216 @@ import logging
 import os
 import threading
 import uuid
-from datetime import datetime, timedelta, time as time_cls
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_HORA_ENTRADA_MANANA = "07:20"
-DEFAULT_HORA_ENTRADA_TARDE = "13:20"
-DEFAULT_TOLERANCIA_MIN = 10
+DIAS_SEMANA = ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"]
+TURNO_HABITUAL_DEFAULT = {"hora_entrada": "08:00", "tolerancia_minutos": 10}
+
+
+def _dia_de_hoy(momento: datetime) -> str:
+    return DIAS_SEMANA[momento.weekday()]
 
 
 class GestorHorarios:
     def __init__(self, archivo_horarios: str):
         self.archivo_horarios = archivo_horarios
         self._lock = threading.Lock()
-        self._horarios = self._cargar()
+        self._datos = self._cargar()
 
     def _cargar(self) -> dict:
         if os.path.exists(self.archivo_horarios):
             try:
                 with open(self.archivo_horarios, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                    datos = json.load(f)
+                datos.setdefault("cursos", {})
+                datos.setdefault("grupos_transversales", {})
+                return datos
             except Exception:
-                logger.exception("No se pudo leer %s, se arranca con horarios vacíos", self.archivo_horarios)
-        return {}
+                logger.exception("No se pudo leer %s, se arranca vacío", self.archivo_horarios)
+        return {"cursos": {}, "grupos_transversales": {}}
 
     def _guardar(self) -> None:
         try:
             with open(self.archivo_horarios, "w", encoding="utf-8") as f:
-                json.dump(self._horarios, f, ensure_ascii=False, indent=2)
+                json.dump(self._datos, f, ensure_ascii=False, indent=2)
         except Exception:
             logger.exception("No se pudo guardar %s", self.archivo_horarios)
 
-    def obtener_todos(self) -> dict:
-        return dict(self._horarios)
+    # ------------------------------------------------------------------
+    # Lectura
+    # ------------------------------------------------------------------
+    def obtener_todos_los_cursos(self) -> dict:
+        return dict(self._datos["cursos"])
 
-    @staticmethod
-    def _predeterminado(curso: str = "") -> dict:
-        try:
-            numero = int("".join(c for c in curso if c.isdigit()))
-        except ValueError:
-            numero = 0
+    def obtener(self, curso: str) -> dict:
+        cfg = self._datos["cursos"].get(curso, {})
         return {
-            "hora_entrada": DEFAULT_HORA_ENTRADA_TARDE if 1 <= numero <= 3
-            else DEFAULT_HORA_ENTRADA_MANANA,
-            "tolerancia_minutos": DEFAULT_TOLERANCIA_MIN,
+            "turno_habitual": cfg.get("turno_habitual", dict(TURNO_HABITUAL_DEFAULT)),
+            "contraturnos": cfg.get("contraturnos", []),
         }
 
-    def obtener(self, curso: str, fecha=None) -> dict:
-        """Obtiene el horario efectivo para una fecha, con compatibilidad
-        para el formato anterior de horarios.json."""
-        cfg = self._horarios.get(curso, self._predeterminado(curso))
-        if "habitual" in cfg:
-            habitual = cfg["habitual"]
-            contraturno = self.obtener_contraturno(curso, fecha)
-            cambios = cfg.get("cambios", {})
-        else:
-            habitual = {
-                "hora_entrada": cfg.get("hora_entrada", self._predeterminado(curso)["hora_entrada"]),
-                "tolerancia_minutos": cfg.get("tolerancia_minutos", DEFAULT_TOLERANCIA_MIN),
+    def obtener_grupos_transversales(self) -> dict:
+        """Solo informativo por ahora — ver docstring del módulo."""
+        return dict(self._datos["grupos_transversales"])
+
+    # ------------------------------------------------------------------
+    # Validación
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _validar_hora(hora: str) -> str:
+        datetime.strptime(hora, "%H:%M")
+        return hora
+
+    @classmethod
+    def _validar_dias(cls, dias: list) -> list:
+        dias_validos = [d for d in dias if d in DIAS_SEMANA]
+        if not dias_validos:
+            raise ValueError("Hay que elegir al menos un día válido")
+        return dias_validos
+
+    @staticmethod
+    def _hora_inicio(franja: dict) -> str:
+        return franja.get("hora_inicio") or franja["hora_entrada"]
+
+    # ------------------------------------------------------------------
+    # Turno habitual
+    # ------------------------------------------------------------------
+    def establecer_turno_habitual(self, curso: str, hora_entrada: str, tolerancia_minutos: int = 10) -> None:
+        self._validar_hora(hora_entrada)
+        with self._lock:
+            self._datos["cursos"].setdefault(curso, {})
+            self._datos["cursos"][curso]["turno_habitual"] = {
+                "hora_entrada": hora_entrada, "tolerancia_minutos": int(tolerancia_minutos),
             }
-            contraturno = dict(habitual)
-            cambios = {}
-        cambio = cambios.get(self._fecha_str(fecha)) if fecha else None
-        if cambio and cambio.get("tipo") == "contraturno_id":
-            for registro in self.obtener_contraturnos(curso):
-                if registro.get("id") == cambio.get("id"):
-                    return {
-                        "hora_entrada": registro["hora_entrada"],
-                        "tolerancia_minutos": registro["tolerancia_minutos"],
-                    }
-        if cambio and cambio.get("tipo") == "contraturno":
-            return dict(contraturno)
-        if cambio and cambio.get("tipo") == "normal":
-            return dict(habitual)
-        return dict(cambio or habitual)
+            self._guardar()
+            logger.info("Turno habitual de %s actualizado: entra %s (tolerancia %d min)",
+                        curso, hora_entrada, tolerancia_minutos)
 
-    def obtener_contraturnos(self, curso: str = None) -> list:
-        cursos = [curso] if curso else list(self._horarios)
-        resultado = []
-        for nombre in cursos:
-            cfg = self._horarios.get(nombre, {})
-            registros = cfg.get("contraturnos")
-            if registros is None and "contraturno" in cfg:
-                registros = [{
-                    "id": f"legacy-{nombre}",
-                    "curso": nombre,
-                    "dia": "todos",
-                    **cfg["contraturno"],
-                }]
-            for registro in registros or []:
-                resultado.append({**registro, "curso": nombre})
-        return resultado
-
-    def obtener_contraturno(self, curso: str, fecha=None) -> dict:
-        cfg = self._horarios.get(curso, self._predeterminado(curso))
-        registros = self.obtener_contraturnos(curso)
-        dias = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
-        dia = dias[fecha.weekday()] if hasattr(fecha, "weekday") else None
-        for registro in registros:
-            if registro.get("dia") in (dia, "todos"):
-                return {
-                    "hora_entrada": registro["hora_entrada"],
-                    "tolerancia_minutos": registro["tolerancia_minutos"],
+    def establecer_turno_habitual_multiple(self, cursos: list, hora_entrada: str, tolerancia_minutos: int = 10) -> None:
+        self._validar_hora(hora_entrada)
+        with self._lock:
+            for curso in cursos:
+                self._datos["cursos"].setdefault(curso, {})
+                self._datos["cursos"][curso]["turno_habitual"] = {
+                    "hora_entrada": hora_entrada, "tolerancia_minutos": int(tolerancia_minutos),
                 }
-        if "habitual" not in cfg:
-            return dict(cfg)
-        return dict(cfg.get("contraturno", cfg["habitual"]))
+            self._guardar()
+            logger.info("Turno habitual aplicado a %d cursos: entra %s", len(cursos), hora_entrada)
 
-    def _es_permanente(self, identificador: str, curso: str) -> bool:
-        """Verifica si un contraturno está marcado como permanente."""
-        for registro in self.obtener_contraturnos(curso):
-            if registro.get("id") == identificador:
-                return registro.get("permanente", False)
+    # ------------------------------------------------------------------
+    # Contraturnos (lista por curso)
+    # ------------------------------------------------------------------
+    def agregar_contraturno(self, curso: str, materia: str, dias: list,
+                             hora_inicio: str, hora_fin: str, tolerancia_minutos: int = 10) -> str:
+        self._validar_hora(hora_inicio)
+        self._validar_hora(hora_fin)
+        dias_validados = self._validar_dias(dias)
+
+        contraturno_id = uuid.uuid4().hex[:8]
+        with self._lock:
+            self._datos["cursos"].setdefault(curso, {})
+            self._datos["cursos"][curso].setdefault("contraturnos", [])
+            self._datos["cursos"][curso]["contraturnos"].append({
+                "id": contraturno_id, "materia": materia, "dias": dias_validados,
+                "hora_inicio": hora_inicio, "hora_fin": hora_fin,
+                "tolerancia_minutos": int(tolerancia_minutos),
+            })
+            self._guardar()
+            logger.info("Contraturno agregado a %s: %s (%s) %s-%s",
+                        curso, materia, dias_validados, hora_inicio, hora_fin)
+        return contraturno_id
+
+    def editar_contraturno(self, curso: str, contraturno_id: str, **cambios) -> bool:
+        if "hora_inicio" in cambios:
+            self._validar_hora(cambios["hora_inicio"])
+        if "hora_fin" in cambios:
+            self._validar_hora(cambios["hora_fin"])
+        if "dias" in cambios:
+            cambios["dias"] = self._validar_dias(cambios["dias"])
+        if "tolerancia_minutos" in cambios:
+            cambios["tolerancia_minutos"] = int(cambios["tolerancia_minutos"])
+
+        with self._lock:
+            contraturnos = self._datos["cursos"].get(curso, {}).get("contraturnos", [])
+            for c in contraturnos:
+                if c["id"] == contraturno_id:
+                    c.update(cambios)
+                    self._guardar()
+                    logger.info("Contraturno %s de %s actualizado", contraturno_id, curso)
+                    return True
         return False
 
-    def crear_contraturno(self, curso: str, dia: str, hora_entrada: str,
-                          tolerancia_minutos: int) -> dict:
-        self._validar_horario(hora_entrada, tolerancia_minutos)
-        registro = {
-            "id": uuid.uuid4().hex,
-            "curso": curso,
-            "dia": dia,
-            "hora_entrada": hora_entrada,
-            "tolerancia_minutos": int(tolerancia_minutos),
-        }
+    def eliminar_contraturno(self, curso: str, contraturno_id: str) -> bool:
         with self._lock:
-            cfg = self._horarios.setdefault(curso, {
-                "habitual": self._predeterminado(curso),
-                "cambios": {},
-            })
-            cfg.setdefault("contraturnos", []).append(registro)
-            self._guardar()
-        return registro
+            contraturnos = self._datos["cursos"].get(curso, {}).get("contraturnos", [])
+            largo_previo = len(contraturnos)
+            contraturnos[:] = [c for c in contraturnos if c["id"] != contraturno_id]
+            if len(contraturnos) < largo_previo:
+                self._guardar()
+                logger.info("Contraturno %s de %s eliminado", contraturno_id, curso)
+                return True
+        return False
 
-    def actualizar_contraturno(self, identificador: str, curso: str, dia: str,
-                               hora_entrada: str, tolerancia_minutos: int) -> dict:
-        if self._es_permanente(identificador, curso):
-            raise ValueError("No se puede modificar un contraturno permanente")
-        
-        self._validar_horario(hora_entrada, tolerancia_minutos)
+    # ------------------------------------------------------------------
+    # Grupos transversales (informativo por ahora)
+    # ------------------------------------------------------------------
+    def establecer_grupo_transversal(self, nombre: str, dias: list, hora_inicio: str,
+                                      hora_fin: str, tolerancia_minutos: int = 10) -> None:
+        self._validar_hora(hora_inicio)
+        self._validar_hora(hora_fin)
+        dias_validados = self._validar_dias(dias)
         with self._lock:
-            for registro in self.obtener_contraturnos(curso):
-                if registro.get("id") == identificador:
-                    registro.update({
-                        "dia": dia, "hora_entrada": hora_entrada,
-                        "tolerancia_minutos": int(tolerancia_minutos),
-                    })
-                    self._horarios[curso].setdefault("contraturnos", [])
-                    reemplazar = self._horarios[curso]["contraturnos"]
-                    for indice, actual in enumerate(reemplazar):
-                        if actual.get("id") == identificador:
-                            reemplazar[indice] = registro
-                    self._guardar()
-                    return registro
-        raise KeyError("Contraturno no encontrado")
-
-    def eliminar_contraturno(self, identificador: str, curso: str) -> None:
-        if self._es_permanente(identificador, curso):
-            raise ValueError("No se puede eliminar un contraturno permanente")
-        
-        with self._lock:
-            cfg = self._horarios.get(curso, {})
-            registros = cfg.get("contraturnos", [])
-            nuevos = [r for r in registros if r.get("id") != identificador]
-            if len(nuevos) == len(registros):
-                raise KeyError("Contraturno no encontrado")
-            cfg["contraturnos"] = nuevos
-            self._guardar()
-
-    def activar_contraturno_registro(self, identificador: str, curso: str, fecha=None) -> None:
-        if not any(r.get("id") == identificador for r in self.obtener_contraturnos(curso)):
-            raise KeyError("Contraturno no encontrado")
-        with self._lock:
-            cfg = self._horarios.setdefault(curso, {
-                "habitual": self._predeterminado(curso), "cambios": {}
-            })
-            cfg.setdefault("cambios", {})
-            cfg["cambios"][self._fecha_str(fecha)] = {
-                "tipo": "contraturno_id", "id": identificador
+            self._datos["grupos_transversales"][nombre] = {
+                "dias": dias_validados, "hora_inicio": hora_inicio, "hora_fin": hora_fin,
+                "tolerancia_minutos": int(tolerancia_minutos),
             }
             self._guardar()
+            logger.info("Grupo transversal '%s' actualizado", nombre)
 
-    @staticmethod
-    def _validar_horario(hora_entrada: str, tolerancia_minutos: int) -> None:
-        datetime.strptime(hora_entrada, "%H:%M")
-        if int(tolerancia_minutos) < 0 or int(tolerancia_minutos) > 120:
-            raise ValueError("La tolerancia debe estar entre 0 y 120 minutos")
-
-    @staticmethod
-    def _fecha_str(fecha) -> str:
-        if fecha is None:
-            return datetime.now().strftime("%Y-%m-%d")
-        return fecha.strftime("%Y-%m-%d") if hasattr(fecha, "strftime") else str(fecha)
-
-    def establecer(self, curso: str, hora_entrada: str, tolerancia_minutos: int,
-                  fecha=None, habitual: bool = False, modo: str = "especial") -> None:
-        # Validamos el formato acá para no guardar basura que después
-        # rompa calcular_estado() en silencio.
-        datetime.strptime(hora_entrada, "%H:%M")
-
-        tolerancia = int(tolerancia_minutos)
-        if tolerancia < 0 or tolerancia > 120:
-            raise ValueError("La tolerancia debe estar entre 0 y 120 minutos")
-
+    def eliminar_grupo_transversal(self, nombre: str) -> bool:
         with self._lock:
-            actual = self._horarios.get(curso, {})
-            if "habitual" not in actual:
-                horario_anterior = {
-                    "hora_entrada": actual.get(
-                        "hora_entrada", self._predeterminado(curso)["hora_entrada"]
-                    ),
-                    "tolerancia_minutos": actual.get("tolerancia_minutos", DEFAULT_TOLERANCIA_MIN),
-                }
-                actual = {
-                    "habitual": horario_anterior,
-                    "contraturno": dict(horario_anterior),
-                    "cambios": {},
-                }
-            actual.setdefault("contraturno", dict(actual["habitual"]))
-            actual.setdefault("cambios", {})
-            nuevo = {"hora_entrada": hora_entrada, "tolerancia_minutos": tolerancia}
-            if habitual:
-                actual["habitual"] = nuevo
-            elif modo == "contraturno":
-                actual["contraturno"] = nuevo
-            else:
-                actual["cambios"][self._fecha_str(fecha)] = {
-                    **nuevo, "tipo": "especial"
-                }
-            self._horarios[curso] = actual
-            self._guardar()
-            alcance = "habitual" if habitual else (
-                "contraturno" if modo == "contraturno"
-                else f"la fecha {self._fecha_str(fecha)}"
+            if nombre in self._datos["grupos_transversales"]:
+                del self._datos["grupos_transversales"][nombre]
+                self._guardar()
+                return True
+        return False
+
+    # ------------------------------------------------------------------
+    # Cálculo de estado al tomar asistencia
+    # ------------------------------------------------------------------
+    def calcular_estado(self, curso: str, momento: datetime) -> dict:
+        """Devuelve {'turno': <nombre de la franja vigente>, 'estado': 'PRESENTE'|'TARDE'}.
+        'turno' es 'Habitual' o el nombre de la materia (contraturno)
+        si hoy corresponde y ya empezó."""
+        cfg = self.obtener(curso)
+        dia_hoy = _dia_de_hoy(momento)
+
+        candidatos = [("Habitual", cfg["turno_habitual"])]
+        for c in cfg["contraturnos"]:
+            if dia_hoy in c["dias"]:
+                candidatos.append((c["materia"], c))
+
+        vigentes = [
+            (nombre, franja) for nombre, franja in candidatos
+            if datetime.strptime(self._hora_inicio(franja), "%H:%M").time() <= momento.time()
+        ]
+
+        if vigentes:
+            nombre, franja = max(
+                vigentes, key=lambda par: datetime.strptime(self._hora_inicio(par[1]), "%H:%M").time()
             )
-            logger.info("Horario actualizado para %s (%s): entra %s, tolerancia %d min",
-                        curso, alcance, hora_entrada, tolerancia)
+        else:
+            nombre, franja = min(
+                candidatos, key=lambda par: datetime.strptime(self._hora_inicio(par[1]), "%H:%M").time()
+            )
+            return {"turno": nombre, "estado": "PRESENTE"}
 
-    def activar_modo(self, curso: str, modo: str, fecha=None) -> None:
-        if modo not in ("normal", "contraturno"):
-            raise ValueError("Modo de horario inválido")
-        with self._lock:
-            actual = self._horarios.get(curso, {})
-            if "habitual" not in actual:
-                base = {
-                    "hora_entrada": actual.get("hora_entrada", self._predeterminado(curso)["hora_entrada"]),
-                    "tolerancia_minutos": actual.get("tolerancia_minutos", DEFAULT_TOLERANCIA_MIN),
-                }
-                actual = {"habitual": base, "contraturno": dict(base), "cambios": {}}
-            actual.setdefault("contraturno", dict(actual["habitual"]))
-            actual.setdefault("cambios", {})
-            actual["cambios"][self._fecha_str(fecha)] = {"tipo": modo}
-            self._horarios[curso] = actual
-            self._guardar()
-
-    def calcular_estado(self, curso: str, momento: datetime) -> str:
-        """Devuelve 'PRESENTE' o 'TARDE' según el horario configurado del curso."""
-        cfg = self.obtener(curso, momento.date())
-        hora_entrada = datetime.strptime(cfg["hora_entrada"], "%H:%M").time()
+        hora_inicio = datetime.strptime(self._hora_inicio(franja), "%H:%M").time()
         limite = (
-            datetime.combine(momento.date(), hora_entrada) + timedelta(minutes=cfg["tolerancia_minutos"])
+            datetime.combine(momento.date(), hora_inicio) + timedelta(minutes=franja["tolerancia_minutos"])
         ).time()
-        return "PRESENTE" if momento.time() <= limite else "TARDE"
+
+        estado = "PRESENTE" if momento.time() <= limite else "TARDE"
+        return {"turno": nombre, "estado": estado}

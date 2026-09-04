@@ -143,48 +143,136 @@ def create_blueprint(gestor_rostros, registro_asistencia, gestor_horarios, gesto
         if os.path.exists(carpeta_rostros):
             cursos = sorted(d for d in os.listdir(carpeta_rostros) if os.path.isdir(os.path.join(carpeta_rostros, d)))
 
-        horarios_guardados = gestor_horarios.obtener_todos()
+        horarios_guardados = gestor_horarios.obtener_todos_los_cursos()
         resultado = {curso: gestor_horarios.obtener(curso) for curso in cursos}
-        for curso, cfg in horarios_guardados.items():
-            resultado.setdefault(curso, cfg)
+        # Cursos con horario guardado pero sin carpeta de fotos (cambiaron
+        # de nombre, etc.) — se muestran igual para no perder la config.
+        for curso in horarios_guardados:
+            resultado.setdefault(curso, gestor_horarios.obtener(curso))
 
-        return jsonify({"horarios": resultado})
+        return jsonify({
+            "cursos": resultado,
+            "grupos_transversales": gestor_horarios.obtener_grupos_transversales(),
+        })
 
-    @bp.route("/admin/api/horarios", methods=["POST"])
+    @bp.route("/admin/api/horarios/turno_habitual", methods=["POST"])
     @requiere_admin
-    def admin_guardar_horario():
+    def admin_guardar_turno_habitual():
         data = request.get_json(silent=True) or {}
         curso = (data.get("curso") or "").strip()
-        turno = data.get("turno")
-        contraturno = data.get("contraturno")
+        hora_entrada = (data.get("hora_entrada") or "").strip()
+        tolerancia_minutos = data.get("tolerancia_minutos", 10)
 
-        if not curso or not turno:
-            return jsonify({"ok": False, "mensaje": "Faltan 'curso' o 'turno'"}), 400
+        if not curso or not hora_entrada:
+            return jsonify({"ok": False, "mensaje": "Faltan 'curso' o 'hora_entrada'"}), 400
 
         try:
-            gestor_horarios.establecer(curso, turno, contraturno)
-        except (ValueError, KeyError):
-            return jsonify({"ok": False, "mensaje": "Formato de horario inválido (hora_entrada debe ser HH:MM)"}), 400
+            gestor_horarios.establecer_turno_habitual(curso, hora_entrada, tolerancia_minutos)
+        except ValueError:
+            return jsonify({"ok": False, "mensaje": "Formato de hora inválido (usar HH:MM)"}), 400
 
         return jsonify({"ok": True})
 
-    @bp.route("/admin/api/horarios/aplicar_multiple", methods=["POST"])
+    @bp.route("/admin/api/horarios/turno_habitual_multiple", methods=["POST"])
     @requiere_admin
-    def admin_aplicar_horario_multiple():
+    def admin_aplicar_turno_habitual_multiple():
         data = request.get_json(silent=True) or {}
         cursos = data.get("cursos") or []
-        turno = data.get("turno")
-        contraturno = data.get("contraturno")
+        hora_entrada = (data.get("hora_entrada") or "").strip()
+        tolerancia_minutos = data.get("tolerancia_minutos", 10)
 
-        if not cursos or not turno:
-            return jsonify({"ok": False, "mensaje": "Faltan 'cursos' o 'turno'"}), 400
+        if not cursos or not hora_entrada:
+            return jsonify({"ok": False, "mensaje": "Faltan 'cursos' o 'hora_entrada'"}), 400
 
         try:
-            gestor_horarios.establecer_multiple(cursos, turno, contraturno)
-        except (ValueError, KeyError):
-            return jsonify({"ok": False, "mensaje": "Formato de horario inválido (hora_entrada debe ser HH:MM)"}), 400
+            gestor_horarios.establecer_turno_habitual_multiple(cursos, hora_entrada, tolerancia_minutos)
+        except ValueError:
+            return jsonify({"ok": False, "mensaje": "Formato de hora inválido (usar HH:MM)"}), 400
 
         return jsonify({"ok": True, "cursos_actualizados": len(cursos)})
+
+    @bp.route("/admin/api/horarios/contraturno", methods=["POST"])
+    @requiere_admin
+    def admin_agregar_contraturno():
+        data = request.get_json(silent=True) or {}
+        curso = (data.get("curso") or "").strip()
+        materia = (data.get("materia") or "").strip()
+        dias = data.get("dias") or []
+        hora_inicio = (data.get("hora_inicio") or "").strip()
+        hora_fin = (data.get("hora_fin") or "").strip()
+        tolerancia_minutos = data.get("tolerancia_minutos", 10)
+
+        if not curso or not materia or not hora_inicio or not hora_fin:
+            return jsonify({"ok": False, "mensaje": "Faltan datos obligatorios"}), 400
+
+        try:
+            contraturno_id = gestor_horarios.agregar_contraturno(
+                curso, materia, dias, hora_inicio, hora_fin, tolerancia_minutos
+            )
+        except ValueError as e:
+            return jsonify({"ok": False, "mensaje": str(e)}), 400
+
+        return jsonify({"ok": True, "id": contraturno_id})
+
+    @bp.route("/admin/api/horarios/contraturno/editar", methods=["POST"])
+    @requiere_admin
+    def admin_editar_contraturno():
+        data = request.get_json(silent=True) or {}
+        curso = (data.get("curso") or "").strip()
+        contraturno_id = data.get("id")
+
+        if not curso or not contraturno_id:
+            return jsonify({"ok": False, "mensaje": "Faltan 'curso' o 'id'"}), 400
+
+        cambios = {k: v for k, v in data.items() if k in
+                   ("materia", "dias", "hora_inicio", "hora_fin", "tolerancia_minutos")}
+
+        try:
+            encontrado = gestor_horarios.editar_contraturno(curso, contraturno_id, **cambios)
+        except ValueError as e:
+            return jsonify({"ok": False, "mensaje": str(e)}), 400
+
+        if not encontrado:
+            return jsonify({"ok": False, "mensaje": "No se encontró ese contraturno"}), 404
+        return jsonify({"ok": True})
+
+    @bp.route("/admin/api/horarios/contraturno/eliminar", methods=["POST"])
+    @requiere_admin
+    def admin_eliminar_contraturno():
+        data = request.get_json(silent=True) or {}
+        curso = (data.get("curso") or "").strip()
+        contraturno_id = data.get("id")
+
+        if not curso or not contraturno_id:
+            return jsonify({"ok": False, "mensaje": "Faltan 'curso' o 'id'"}), 400
+
+        encontrado = gestor_horarios.eliminar_contraturno(curso, contraturno_id)
+        if not encontrado:
+            return jsonify({"ok": False, "mensaje": "No se encontró ese contraturno"}), 404
+        return jsonify({"ok": True})
+
+    @bp.route("/admin/api/horarios/grupo_transversal", methods=["POST"])
+    @requiere_admin
+    def admin_guardar_grupo_transversal():
+        """Guarda el horario de un grupo transversal (ej: un nivel de
+        inglés). Todavía informativo — no se conecta a la asistencia
+        automática hasta poder asignar alumnos individuales a un grupo."""
+        data = request.get_json(silent=True) or {}
+        nombre = (data.get("nombre") or "").strip()
+        dias = data.get("dias") or []
+        hora_inicio = (data.get("hora_inicio") or "").strip()
+        hora_fin = (data.get("hora_fin") or "").strip()
+        tolerancia_minutos = data.get("tolerancia_minutos", 10)
+
+        if not nombre or not hora_inicio or not hora_fin:
+            return jsonify({"ok": False, "mensaje": "Faltan datos obligatorios"}), 400
+
+        try:
+            gestor_horarios.establecer_grupo_transversal(nombre, dias, hora_inicio, hora_fin, tolerancia_minutos)
+        except ValueError as e:
+            return jsonify({"ok": False, "mensaje": str(e)}), 400
+
+        return jsonify({"ok": True})
 
     @bp.route("/admin/descargar_asistencia/<curso>")
     @requiere_admin

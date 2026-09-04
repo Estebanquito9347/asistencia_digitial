@@ -1,275 +1,391 @@
 // static/admin.js
 // -----------------
-// Panel de la preceptora: resumen y registros por curso, edición de
-// horarios, descarga de CSV por curso.
+// Panel de la preceptora, rediseñado para ser simple: pestañas
+// grandes, tarjetas por curso, y un acordeón para editar horarios
+// sin tener que entender la estructura de datos de abajo.
 
 const statusAdmin = document.getElementById('statusAdmin');
-const filtroCurso = document.getElementById('filtroCurso');
 
-cargarCursosEnFiltro();
+const DIAS = [
+    { clave: 'lunes', letra: 'L' },
+    { clave: 'martes', letra: 'M' },
+    { clave: 'miercoles', letra: 'X' },
+    { clave: 'jueves', letra: 'J' },
+    { clave: 'viernes', letra: 'V' },
+];
+
+let listaCursos = [];
+let cursoFiltroActual = null;
+let registrosGlobales = []; // NUEVO: Guarda todos los registros de hoy
+let filtroTurnoActual = 'todos'; // NUEVO: Filtro por tipo de asistencia ('todos', 'habitual', 'contraturno')
+
+// ------------------------------------------------------------------
+// Pestañas
+// ------------------------------------------------------------------
+function mostrarTab(nombre) {
+    document.getElementById('tabAsistencia').style.display = nombre === 'asistencia' ? 'block' : 'none';
+    document.getElementById('tabHorarios').style.display = nombre === 'horarios' ? 'block' : 'none';
+    document.getElementById('tabBtnAsistencia').classList.toggle('activo', nombre === 'asistencia');
+    document.getElementById('tabBtnHorarios').classList.toggle('activo', nombre === 'horarios');
+}
+
+// ------------------------------------------------------------------
+// Arranque
+// ------------------------------------------------------------------
+mostrarFechaDeHoy();
+cargarCursos();
 cargarResumen();
 cargarRegistros();
 cargarHorarios();
 setInterval(() => { cargarResumen(); cargarRegistros(); }, 10000);
 
-filtroCurso.addEventListener('change', cargarRegistros);
+function mostrarFechaDeHoy() {
+    const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+    const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
+                   'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+    const hoy = new Date();
+    const texto = `Asistencia de hoy — ${dias[hoy.getDay()]} ${hoy.getDate()} de ${meses[hoy.getMonth()]}`;
+    document.getElementById('fechaHoy').innerText = texto;
+}
 
-function cargarCursosEnFiltro() {
+function cargarCursos() {
     fetch('/obtener_cursos')
         .then(res => res.json())
         .then(data => {
-            (data.cursos || []).forEach(curso => {
-                const option = document.createElement('option');
-                option.value = curso;
-                option.innerText = curso;
-                filtroCurso.appendChild(option);
-            });
-            cargarContraturnos();
+            listaCursos = data.cursos || [];
+            document.getElementById('checkboxCursos').innerHTML = listaCursos.map(curso => `
+                <label class="checkbox-curso">
+                    <input type="checkbox" value="${curso}"> ${curso}
+                </label>
+            `).join('');
         })
         .catch(err => console.error('Error al cargar cursos:', err));
 }
 
+// ------------------------------------------------------------------
+// TAB Asistencia
+// ------------------------------------------------------------------
 function cargarResumen() {
     fetch('/admin/api/resumen')
         .then(res => res.json())
         .then(data => {
-            const contenedor = document.getElementById('resumenCursos');
+            const contenedor = document.getElementById('tarjetasCursos');
             if (!data.cursos || data.cursos.length === 0) {
-                contenedor.innerHTML = '<em>Todavía no hay presentes registrados hoy.</em>';
+                contenedor.innerHTML = '<p class="texto-ayuda">Todavía no hay presentes registrados hoy.</p>';
                 return;
             }
-            contenedor.innerHTML = data.cursos
-                .map(c => `<div class="resumen-fila"><span>${c.curso}</span><strong>${c.presentes}</strong></div>`)
-                .join('');
+            contenedor.innerHTML = `
+                <div class="tarjeta-curso ${!cursoFiltroActual ? 'tarjeta-activa' : ''}" onclick="filtrarPorCurso(null)">
+                    <div class="tarjeta-curso-nombre">Todos</div>
+                    <div class="tarjeta-curso-cantidad">${data.cursos.reduce((s, c) => s + c.presentes, 0)}</div>
+                </div>
+            ` + data.cursos.map(c => `
+                <div class="tarjeta-curso ${cursoFiltroActual === c.curso ? 'tarjeta-activa' : ''}" onclick="filtrarPorCurso('${c.curso}')">
+                    <div class="tarjeta-curso-nombre">${c.curso}</div>
+                    <div class="tarjeta-curso-cantidad">${c.presentes}</div>
+                    <button class="tarjeta-curso-descargar" onclick="event.stopPropagation(); descargarCSV('${c.curso}')">📥 Descargar</button>
+                </div>
+            `).join('');
         })
         .catch(err => console.error('Error al cargar resumen:', err));
 }
 
+function filtrarPorCurso(curso) {
+    cursoFiltroActual = curso;
+    document.getElementById('tituloTabla').innerText = curso ? `Curso ${curso}` : 'Todos los cursos';
+    cargarResumen();
+    cargarRegistros();
+}
+
 function cargarRegistros() {
-    const curso = filtroCurso.value;
-    const url = curso ? `/admin/api/registros?curso=${encodeURIComponent(curso)}` : '/admin/api/registros';
+    const url = cursoFiltroActual
+        ? `/admin/api/registros?curso=${encodeURIComponent(cursoFiltroActual)}`
+        : '/admin/api/registros';
 
     fetch(url)
         .then(res => res.json())
         .then(data => {
-            const tabla = document.getElementById('tablaRegistros');
-            if (!data.registros || data.registros.length === 0) {
-                tabla.innerHTML = '<tr><td colspan="4"><em>Sin registros hoy.</em></td></tr>';
-                return;
-            }
-            tabla.innerHTML = data.registros.map(r => `
-                <tr>
-                    <td>${r.Hora}</td>
-                    <td>${r.Alumno}</td>
-                    <td>${r.Curso}</td>
-                    <td>${r.Estado === 'TARDE' ? '⏰ TARDE' : '✅ PRESENTE'}</td>
-                </tr>
-            `).join('');
+            registrosGlobales = data.registros || []; // Guardamos en la variable global
+            renderizarTablaRegistros(); // Renderizamos aplicando los filtros
         })
         .catch(err => console.error('Error al cargar registros:', err));
 }
 
-function cargarHorarios() {
-    fetch('/admin/api/horarios')
-        .then(res => res.json())
-        .then(data => {
-            const contenedor = document.getElementById('listaHorarios');
-            const cursos = Object.keys(data.horarios || {}).sort();
+// NUEVO: Función encargada de filtrar y dibujar la tabla dinámicamente
+function renderizarTablaRegistros() {
+    const tabla = document.getElementById('tablaRegistros');
+    if (!tabla) return;
 
-            if (cursos.length === 0) {
-                contenedor.innerHTML = '<em>No hay cursos en la carpeta rostros/.</em>';
-                return;
-            }
-
-            contenedor.innerHTML = cursos.map(curso => {
-                const cfg = data.horarios[curso];
-                return `
-                    <div class="control-group horario-fila">
-                        <div class="horario-curso"><strong>${curso}</strong>
-                            ${cfg.modificado_hoy ? '<small>⚠️ Cambio aplicado hoy</small>' : ''}
-                        </div>
-                        <label>Habitual
-                            <input type="time" id="hora-habitual-${curso}" value="${cfg.hora_habitual}">
-                        </label>
-                        <label>Tolerancia
-                            <input type="number" id="tolerancia-habitual-${curso}" value="${cfg.tolerancia_habitual}" min="0" max="120">
-                        </label>
-                        <button onclick="guardarHorario('${curso}', true)">Guardar habitual</button>
-                        <label>Entrada de hoy
-                            <input type="time" id="hora-hoy-${curso}" value="${cfg.hora_entrada}">
-                        </label>
-                        <label>Tolerancia
-                            <input type="number" id="tolerancia-hoy-${curso}" value="${cfg.tolerancia_minutos}" min="0" max="120">
-                        </label>
-                        <button class="btn-success" onclick="guardarHorario('${curso}', false)">Modificar hoy</button>
-                    </div>
-                `;
-            }).join('');
-
-        })
-        .catch(err => console.error('Error al cargar horarios:', err));
-}
-
-function cargarContraturnos() {
-    fetch('/admin/api/contraturnos')
-        .then(res => res.json())
-        .then(data => {
-            const cursos = [...filtroCurso.options].filter(o => o.value).map(o => o.value).sort();
-            const selector = document.getElementById('contraturnoCurso');
-            selector.innerHTML = cursos.map(c => `<option value="${c}">${c}</option>`).join('');
-            
-            const lista = document.getElementById('listaContraturnos');
-            const contraturnos = data.contraturnos || [];
-
-            if (contraturnos.length === 0) {
-                lista.innerHTML = '<em>No hay contraturnos cargados.</em>';
-                return;
-            }
-
-            // Agrupar contraturnos por curso
-            const porCurso = {};
-            contraturnos.forEach(r => {
-                if (!porCurso[r.curso]) porCurso[r.curso] = [];
-                porCurso[r.curso].push(r);
-            });
-
-            // Renderizar estructura expandible por curso
-            lista.innerHTML = Object.keys(porCurso).sort().map(curso => {
-                const id_expandible = `contraturnos-${curso.replace(/\s+/g, '-')}`;
-                return `
-                    <div class="contraturno-curso">
-                        <button type="button" class="btn-expandible" onclick="toggleExpandible('${id_expandible}')">
-                            ▶ ${curso}
-                        </button>
-                        <div id="${id_expandible}" class="contraturno-contenido" style="display:none;">
-                            ${porCurso[curso].map(r => `
-                                <div class="contraturno-registro">
-                                    <span class="contraturno-dia">${r.dia}</span>
-                                    <span class="contraturno-hora">${r.hora_entrada}</span>
-                                    <span class="contraturno-tolerancia">(${r.tolerancia_minutos} min)</span>
-                                    <button type="button" onclick="editarContraturno('${r.id}', '${r.curso}', '${r.dia}', '${r.hora_entrada}', ${r.tolerancia_minutos})">Editar</button>
-                                    <button type="button" class="btn-success" onclick="activarContraturno('${r.id}', '${r.curso}')">Usar hoy</button>
-                                    <button type="button" class="btn-danger" onclick="eliminarContraturno('${r.id}', '${r.curso}')">Eliminar</button>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
-                `;
-            }).join('');
-        })
-        .catch(err => console.error('Error al cargar contraturnos:', err));
-}
-
-function toggleExpandible(id) {
-    const elemento = document.getElementById(id);
-    if (elemento) {
-        elemento.style.display = elemento.style.display === 'none' ? 'block' : 'none';
-        // Cambiar ícono del botón
-        const boton = elemento.previousElementSibling;
-        if (boton) {
-            boton.textContent = boton.textContent.startsWith('▶')
-                ? boton.textContent.replace('▶', '▼')
-                : boton.textContent.replace('▼', '▶');
+    // Aplicamos el filtro de turno/contraturno sobre los registros globales
+    const filtrados = registrosGlobales.filter(r => {
+        const turnoStr = (r.Turno || "").toLowerCase();
+        
+        if (filtroTurnoActual === 'habitual') {
+            // Consideramos habitual si no contiene palabras de contraturno o materia especial
+            return !turnoStr.includes('contraturno') && !turnoStr.includes('materia') && turnoStr !== 'especial';
+        } else if (filtroTurnoActual === 'contraturno') {
+            // Consideramos contraturno si especifica una materia o contraturno
+            return turnoStr.includes('contraturno') || turnoStr.includes('materia') || (turnoStr !== '' && turnoStr !== 'habitual' && turnoStr !== 'entrada');
         }
-    }
-}
-
-function activarContraturno(id, curso) {
-    fetch(`/admin/api/contraturnos/${encodeURIComponent(id)}/activar`, {
-        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({curso})
-    }).then(res => res.json()).then(data => {
-        statusAdmin.innerText = data.ok ? `✅ Contraturno de ${curso} activado para hoy` : `❌ ${data.mensaje}`;
+        return true; // 'todos'
     });
-}
 
-document.getElementById('formContraturno').addEventListener('submit', event => {
-    event.preventDefault();
-    const datos = {
-        curso: document.getElementById('contraturnoCurso').value,
-        dia: document.getElementById('contraturnoDia').value,
-        hora_entrada: document.getElementById('contraturnoHora').value,
-        tolerancia_minutos: document.getElementById('contraturnoTolerancia').value
-    };
-    fetch('/admin/api/contraturnos', {
-        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(datos)
-    }).then(res => res.json()).then(data => {
-        statusAdmin.innerText = data.ok ? '✅ Contraturno agregado' : `❌ ${data.mensaje}`;
-        if (data.ok) cargarContraturnos();
-    });
-});
-
-function editarContraturno(id, curso, dia, hora, tolerancia) {
-    const datos = {
-        curso, dia: prompt('Día (lunes a viernes):', dia),
-        hora_entrada: prompt('Hora de entrada (HH:MM):', hora),
-        tolerancia_minutos: prompt('Tolerancia en minutos:', tolerancia)
-    };
-    if (!datos.dia || !datos.hora_entrada || datos.tolerancia_minutos === null) return;
-    fetch(`/admin/api/contraturnos/${encodeURIComponent(id)}`, {
-        method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(datos)
-    }).then(res => res.json()).then(data => {
-        statusAdmin.innerText = data.ok ? '✅ Contraturno actualizado' : `❌ ${data.mensaje}`;
-        if (data.ok) cargarContraturnos();
-    });
-}
-
-function eliminarContraturno(id, curso) {
-    if (!confirm(`¿Eliminar el contraturno de ${curso}?`)) return;
-    fetch(`/admin/api/contraturnos/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({curso})
-    })
-    .then(res => res.json()).then(data => {
-        statusAdmin.innerText = data.ok ? '✅ Contraturno eliminado' : `❌ ${data.mensaje}`;
-        if (data.ok) cargarContraturnos();
-    });
-}
-
-function guardarHorario(curso, guardar_habitual) {
-    const sufijo = guardar_habitual ? 'habitual' : 'hoy';
-    const hora_entrada = document.getElementById(`hora-${sufijo}-${curso}`).value;
-    const tolerancia_minutos = document.getElementById(`tolerancia-${sufijo}-${curso}`).value;
-
-    fetch('/admin/api/horarios', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ curso, hora_entrada, tolerancia_minutos, guardar_habitual })
-    })
-    .then(res => res.json())
-    .then(data => {
-        statusAdmin.innerText = data.ok
-            ? `✅ Horario de ${curso} actualizado`
-            : `❌ ${data.mensaje}`;
-    })
-    .catch(err => {
-        console.error('Error al guardar horario:', err);
-        statusAdmin.innerText = '❌ Error de conexión';
-    });
-}
-
-function descargarCSV() {
-    const curso = filtroCurso.value;
-    if (!curso) {
-        alert('Elegí un curso específico para descargar (arriba, en el filtro).');
+    if (filtrados.length === 0) {
+        tabla.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #6b7280;"><em>No hay registros para mostrar con este filtro.</em></td></tr>';
         return;
     }
+
+    tabla.innerHTML = filtrados.map(r => `
+        <tr>
+            <td>${r.Hora}</td>
+            <td>${r.Alumno}</td>
+            <td>${r.Curso}</td>
+            <td><span style="background: #f3f4f6; padding: 2px 6px; border-radius: 4px; font-size: 12px;">${r.Turno || 'Habitual'}</span></td>
+            <td>${r.Estado === 'TARDE' ? '<span class="pill pill-tarde">⏰ Tarde</span>' : '<span class="pill pill-presente">✅ A tiempo</span>'}</td>
+        </tr>
+    `).join('');
+}
+
+// NUEVO: Función que cambia el filtro al hacer clic en los botones de solapas
+function filtrarPorTurno(tipo, botonElement) {
+    filtroTurnoActual = tipo;
+
+    // Cambiar clases visuales de los botones de filtro
+    document.querySelectorAll('.btn-filtro-turno').forEach(b => b.classList.remove('activo'));
+    if (botonElement) {
+        botonElement.classList.add('activo');
+    }
+
+    renderizarTablaRegistros();
+}
+
+function descargarCSV(curso) {
     window.location.href = `/admin/descargar_asistencia/${encodeURIComponent(curso)}`;
 }
 
 function reentrenar() {
-    statusAdmin.innerText = '🔄 Reentrenando...';
+    statusAdmin.innerText = '🔄 Actualizando...';
     fetch('/admin/reentrenar_rostros', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({})
     })
     .then(res => res.json())
-    .then(data => {
-        statusAdmin.innerText = `✅ Listo: ${data.alumnos_cargados} alumnos cargados`;
-    })
+    .then(data => { statusAdmin.innerText = `✅ Listo: ${data.alumnos_cargados} alumnos cargados`; })
     .catch(err => {
         console.error('Error al reentrenar:', err);
         statusAdmin.innerText = '❌ Error de conexión';
     });
+}
+
+// ------------------------------------------------------------------
+// TAB Horarios
+// ------------------------------------------------------------------
+function aplicarHorarioMasivo() {
+    const cursosSeleccionados = Array.from(document.querySelectorAll('#checkboxCursos input:checked')).map(el => el.value);
+    if (cursosSeleccionados.length === 0) { alert('Marcá al menos un curso.'); return; }
+
+    const hora_entrada = document.getElementById('masivoHora').value;
+    const tolerancia_minutos = document.getElementById('masivoTolerancia').value;
+
+    fetch('/admin/api/horarios/turno_habitual_multiple', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cursos: cursosSeleccionados, hora_entrada, tolerancia_minutos })
+    })
+    .then(res => res.json())
+    .then(data => {
+        statusAdmin.innerText = data.ok
+            ? `✅ Horario aplicado a ${data.cursos_actualizados} curso(s)`
+            : `❌ ${data.mensaje}`;
+        if (data.ok) cargarHorarios();
+    })
+    .catch(err => {
+        console.error('Error al aplicar horario masivo:', err);
+        statusAdmin.innerText = '❌ Error de conexión';
+    });
+}
+
+function cargarHorarios() {
+    fetch('/admin/api/horarios')
+        .then(res => res.json())
+        .then(data => {
+            renderizarAcordeonCursos(data.cursos || {});
+            renderizarGruposTransversales(data.grupos_transversales || {});
+        })
+        .catch(err => console.error('Error al cargar horarios:', err));
+}
+
+function badgesDias(diasSeleccionados) {
+    return DIAS.map(d => `
+        <span class="dia-badge ${diasSeleccionados.includes(d.clave) ? 'dia-activo' : ''}">${d.letra}</span>
+    `).join('');
+}
+
+function checkboxesDias(prefijoId, diasSeleccionados) {
+    return DIAS.map(d => `
+        <label class="dia-checkbox">
+            <input type="checkbox" id="${prefijoId}-${d.clave}" ${diasSeleccionados.includes(d.clave) ? 'checked' : ''}>
+            ${d.letra}
+        </label>
+    `).join('');
+}
+
+function leerDiasSeleccionados(prefijoId) {
+    return DIAS.filter(d => document.getElementById(`${prefijoId}-${d.clave}`).checked).map(d => d.clave);
+}
+
+function renderizarAcordeonCursos(cursos) {
+    const contenedor = document.getElementById('acordeonCursos');
+    const nombresCursos = Object.keys(cursos).sort();
+
+    if (nombresCursos.length === 0) {
+        contenedor.innerHTML = '<p class="texto-ayuda">No hay cursos en la carpeta rostros/.</p>';
+        return;
+    }
+
+    contenedor.innerHTML = nombresCursos.map(curso => {
+        const cfg = cursos[curso];
+        const contraturnos = cfg.contraturnos || [];
+
+        return `
+        <div class="acordeon-item">
+            <div class="acordeon-cabecera" onclick="toggleAcordeon('${curso}')">
+                <span><strong>${curso}</strong> — entra a las ${cfg.turno_habitual.hora_entrada}</span>
+                <span id="flecha-${curso}">▼</span>
+            </div>
+            <div class="acordeon-cuerpo" id="cuerpo-${curso}" style="display:none;">
+
+                <h4>Horario habitual</h4>
+                <div class="fila-horario">
+                    <label>Hora de entrada <input type="time" id="th-hora-${curso}" value="${cfg.turno_habitual.hora_entrada}"></label>
+                    <label>Tolerancia (min) <input type="number" id="th-tol-${curso}" value="${cfg.turno_habitual.tolerancia_minutos}" min="0" max="120"></label>
+                    <button onclick="guardarTurnoHabitual('${curso}')">Guardar</button>
+                </div>
+
+                <h4>Materias con horario especial</h4>
+                <div id="contraturnos-${curso}">
+                    ${contraturnos.length === 0 ? '<p class="texto-ayuda">Este curso no tiene materias con horario especial.</p>' : ''}
+                    ${contraturnos.map(c => `
+                        <div class="tarjeta-contraturno">
+                            <div><strong>${c.materia}</strong></div>
+                            <div>${badgesDias(c.dias)}</div>
+                            <div>${c.hora_inicio} a ${c.hora_fin} (tolerancia ${c.tolerancia_minutos} min)</div>
+                            <button class="btn-danger" onclick="eliminarContraturno('${curso}', '${c.id}')">Eliminar</button>
+                        </div>
+                    `).join('')}
+                </div>
+
+                <h4>Agregar materia con horario especial</h4>
+                <div class="fila-horario">
+                    <label>Materia <input type="text" id="nuevo-materia-${curso}" placeholder="Ej: Ed. Física"></label>
+                </div>
+                <div class="dias-checkbox-fila">${checkboxesDias(`nuevo-dia-${curso}`, [])}</div>
+                <div class="fila-horario">
+                    <label>Desde <input type="time" id="nuevo-inicio-${curso}" value="08:00"></label>
+                    <label>Hasta <input type="time" id="nuevo-fin-${curso}" value="09:00"></label>
+                    <label>Tolerancia (min) <input type="number" id="nuevo-tol-${curso}" value="10" min="0" max="120"></label>
+                    <button onclick="agregarContraturno('${curso}')">Agregar</button>
+                </div>
+            </div>
+        </div>
+        `;
+    }).join('');
+}
+
+function toggleAcordeon(curso) {
+    const cuerpo = document.getElementById(`cuerpo-${curso}`);
+    const flecha = document.getElementById(`flecha-${curso}`);
+    const abierto = cuerpo.style.display !== 'none';
+    cuerpo.style.display = abierto ? 'none' : 'block';
+    flecha.innerText = abierto ? '▼' : '▲';
+}
+
+function guardarTurnoHabitual(curso) {
+    const hora_entrada = document.getElementById(`th-hora-${curso}`).value;
+    const tolerancia_minutos = document.getElementById(`th-tol-${curso}`).value;
+
+    fetch('/admin/api/horarios/turno_habitual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ curso, hora_entrada, tolerancia_minutos })
+    })
+    .then(res => res.json())
+    .then(data => {
+        statusAdmin.innerText = data.ok ? `✅ Horario habitual de ${curso} actualizado` : `❌ ${data.mensaje}`;
+        if (data.ok) cargarHorarios();
+    })
+    .catch(err => {
+        console.error('Error al guardar turno habitual:', err);
+        statusAdmin.innerText = '❌ Error de conexión';
+    });
+}
+
+function agregarContraturno(curso) {
+    const materia = document.getElementById(`nuevo-materia-${curso}`).value.trim();
+    const dias = leerDiasSeleccionados(`nuevo-dia-${curso}`);
+    const hora_inicio = document.getElementById(`nuevo-inicio-${curso}`).value;
+    const hora_fin = document.getElementById(`nuevo-fin-${curso}`).value;
+    const tolerancia_minutos = document.getElementById(`nuevo-tol-${curso}`).value;
+
+    if (!materia) { alert('Escribí el nombre de la materia.'); return; }
+    if (dias.length === 0) { alert('Marcá al menos un día.'); return; }
+
+    fetch('/admin/api/horarios/contraturno', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ curso, materia, dias, hora_inicio, hora_fin, tolerancia_minutos })
+    })
+    .then(res => res.json())
+    .then(data => {
+        statusAdmin.innerText = data.ok ? `✅ Materia agregada a ${curso}` : `❌ ${data.mensaje}`;
+        if (data.ok) cargarHorarios();
+    })
+    .catch(err => {
+        console.error('Error al agregar contraturno:', err);
+        statusAdmin.innerText = '❌ Error de conexión';
+    });
+}
+
+function eliminarContraturno(curso, id) {
+    if (!confirm('¿Eliminar esta materia con horario especial?')) return;
+
+    fetch('/admin/api/horarios/contraturno/eliminar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ curso, id })
+    })
+    .then(res => res.json())
+    .then(data => {
+        statusAdmin.innerText = data.ok ? '✅ Eliminado' : `❌ ${data.mensaje}`;
+        if (data.ok) cargarHorarios();
+    })
+    .catch(err => {
+        console.error('Error al eliminar contraturno:', err);
+        statusAdmin.innerText = '❌ Error de conexión';
+    });
+}
+
+// ------------------------------------------------------------------
+// Grupos transversales (Inglés) — informativo
+// ------------------------------------------------------------------
+function renderizarGruposTransversales(grupos) {
+    const contenedor = document.getElementById('listaIngles');
+    const nombres = Object.keys(grupos).sort();
+
+    if (nombres.length === 0) {
+        contenedor.innerHTML = '<p class="texto-ayuda">No hay niveles cargados todavía.</p>';
+        return;
+    }
+
+    contenedor.innerHTML = nombres.map(nombre => {
+        const g = grupos[nombre];
+        return `
+            <div class="tarjeta-contraturno">
+                <div><strong>${nombre}</strong></div>
+                <div>${badgesDias(g.dias)}</div>
+                <div>${g.hora_inicio} a ${g.hora_fin}</div>
+            </div>
+        `;
+    }).join('');
 }
