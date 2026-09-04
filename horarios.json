@@ -1,59 +1,107 @@
 {
   "cursos": {
     "1A": {
-      "turno_habitual": {"hora_entrada": "13:20", "tolerancia_minutos": 0},
+      "turno_habitual": {
+        "lunes": {"hora_entrada": "13:20", "hora_fin": "18:25", "tolerancia_minutos": 0},
+        "martes": {"hora_entrada": "13:20", "hora_fin": "18:25", "tolerancia_minutos": 0},
+        "miercoles": {"hora_entrada": "13:20", "hora_fin": "18:25", "tolerancia_minutos": 0},
+        "jueves": {"hora_entrada": "13:20", "hora_fin": "17:40", "tolerancia_minutos": 0},
+        "viernes": {"hora_entrada": "13:20", "hora_fin": "17:40", "tolerancia_minutos": 0}
+      },
       "contraturnos": [
         {"id": "1a-01", "materia": "Ed. Tecnológica", "dias": ["miercoles"], "hora_inicio": "08:30", "hora_fin": "09:50", "tolerancia_minutos": 0},
         {"id": "1a-02", "materia": "Ed. Física V", "dias": ["martes", "jueves"], "hora_inicio": "11:00", "hora_fin": "12:00", "tolerancia_minutos": 0}
       ]
     },
     "1B": {
-      "turno_habitual": {"hora_entrada": "13:20", "tolerancia_minutos": 0},
+      "turno_habitual": {
+        "lunes": {"hora_entrada": "13:20", "hora_fin": "17:40", "tolerancia_minutos": 0},
+        "martes": {"hora_entrada": "13:20", "hora_fin": "19:05", "tolerancia_minutos": 0},
+        "miercoles": {"hora_entrada": "13:20", "hora_fin": "17:40", "tolerancia_minutos": 0},
+        "jueves": {"hora_entrada": "13:20", "hora_fin": "17:40", "tolerancia_minutos": 0},
+        "viernes": {"hora_entrada": "13:20", "hora_fin": "18:25", "tolerancia_minutos": 0}
+      },
       "contraturnos": [
-        {"id": "1b-01", "materia": "Ed. Física V", "dias": ["martes"], "hora_inicio": "0:15", "hora_fin": "11:15", "tolerancia_minutos": 0},
+        {"id": "1b-01", "materia": "Ed. Física V", "dias": ["martes"], "hora_inicio": "10:15", "hora_fin": "11:15", "tolerancia_minutos": 0},
         {"id": "1b-02", "materia": "Ed. Tecnológica", "dias": ["jueves"], "hora_inicio": "08:30", "hora_fin": "09:50", "tolerancia_minutos": 0},
-        {"id": "1b-03", "materia": "Ed. Física", "dias": ["jueves"], "hora_inicio": "0:00", "hora_fin": "11:00", "tolerancia_minutos": 0}
+        {"id": "1b-03", "materia": "Ed. Física", "dias": ["jueves"], "hora_inicio": "10:00", "hora_fin": "11:00", "tolerancia_minutos": 0}
       ]
     },
     "2A": {
-      "turno_habitual": {"hora_entrada": "13:20", "tolerancia_minutos": 0},
+      "turno_habitual": {
+        "lunes": {"hora_entrada": "13:20", "hora_fin": "19:05", "tolerancia_minutos": 0},
+        "martes": {"hora_entrada": "13:20", "hora_fin": "19:05", "tolerancia_minutos": 0},
+        "miercoles": {"hora_entrada": "13:20", "hora_fin": "18:25", "tolerancia_minutos": 0},
+        "jueves": {"hora_entrada": "13:20", "hora_fin": "18:25", "tolerancia_minutos": 0},
+        "viernes": {"hora_entrada": "13:20", "hora_fin": "17:40", "tolerancia_minutos": 0}
+      },
       "contraturnos": [
         {"id": "2a-01", "materia": "Ed. Física", "dias": ["martes", "jueves"], "hora_inicio": "08:00", "hora_fin": "09:00", "tolerancia_minutos": 0}
       ]
     },
     "2B": {
-      "turno_habitual": {"hora_entrada": "13:20", "tolerancia_minutos": 0},
+      "turno_habitual": {
+        "lunes": {"hora_entrada": "13:20", "hora_fin": "19:05", "tolerancia_minutos": 0},
+        "martes": {"hora_entrada": "13:20", "hora_fin": "17:40", "tolerancia_minutos": 0},
+        "miercoles": {"hora_entrada": "13:20", "hora_fin": "19:05", "tolerancia_minutos": 0},
+        "jueves": {"hora_entrada": "13:20", "hora_fin": "19:05", "tolerancia_minutos": 0},
+        "viernes": {"hora_entrada": "13:20", "hora_fin": "18:25", "tolerancia_minutos": 0}
+      },
       "contraturnos": []
     },
     "3A": {
-      "turno_habitual": {"hora_entrada": "13:20", "tolerancia_minutos": 0},
+      "turno_habitual": {
+        "lunes": {"hora_entrada": "13:20", "hora_fin": "19:05", "tolerancia_minutos": 0},
+        "martes": {"hora_entrada": "13:20", "hora_fin": "19:05", "tolerancia_minutos": 0},
+        "miercoles": {"hora_entrada": "13:20", "hora_fin": "19:05", "tolerancia_minutos": 0},
+        "jueves": {"hora_entrada": "13:20", "hora_fin": "18:25", "tolerancia_minutos": 0},
+        "viernes": {"hora_entrada": "13:20", "hora_fin": "18:25", "tolerancia_minutos": 0}
+      },
       "contraturnos": [
         {"id": "3a-01", "materia": "Ed. Física V", "dias": ["lunes"], "hora_inicio": "08:00", "hora_fin": "09:00", "tolerancia_minutos": 0},
-        {"id": "3a-02", "materia": "Ed. Física M", "dias": ["lunes"], "hora_inicio": "09:00", "hora_fin": "0:00", "tolerancia_minutos": 0},
+        {"id": "3a-02", "materia": "Ed. Física M", "dias": ["lunes"], "hora_inicio": "09:00", "hora_fin": "10:00", "tolerancia_minutos": 0},
         {"id": "3a-03", "materia": "Historia", "dias": ["martes"], "hora_inicio": "08:00", "hora_fin": "09:20", "tolerancia_minutos": 0},
         {"id": "3a-04", "materia": "Ed. Física M", "dias": ["jueves"], "hora_inicio": "08:00", "hora_fin": "09:00", "tolerancia_minutos": 0},
-        {"id": "3a-05", "materia": "Ed. Física V", "dias": ["jueves"], "hora_inicio": "09:00", "hora_fin": "0:00", "tolerancia_minutos": 0}
+        {"id": "3a-05", "materia": "Ed. Física V", "dias": ["jueves"], "hora_inicio": "09:00", "hora_fin": "10:00", "tolerancia_minutos": 0}
       ]
     },
     "3B": {
-      "turno_habitual": {"hora_entrada": "13:20", "tolerancia_minutos": 0},
+      "turno_habitual": {
+        "lunes": {"hora_entrada": "13:20", "hora_fin": "19:05", "tolerancia_minutos": 0},
+        "martes": {"hora_entrada": "13:20", "hora_fin": "18:25", "tolerancia_minutos": 0},
+        "miercoles": {"hora_entrada": "13:20", "hora_fin": "19:05", "tolerancia_minutos": 0},
+        "jueves": {"hora_entrada": "13:20", "hora_fin": "18:25", "tolerancia_minutos": 0},
+        "viernes": {"hora_entrada": "13:20", "hora_fin": "17:00", "tolerancia_minutos": 0}
+      },
       "contraturnos": [
         {"id": "3b-01", "materia": "Ed. Física V", "dias": ["lunes"], "hora_inicio": "08:00", "hora_fin": "09:00", "tolerancia_minutos": 0},
-        {"id": "3b-02", "materia": "Ed. Física M", "dias": ["lunes"], "hora_inicio": "09:00", "hora_fin": "0:00", "tolerancia_minutos": 0},
+        {"id": "3b-02", "materia": "Ed. Física M", "dias": ["lunes"], "hora_inicio": "09:00", "hora_fin": "10:00", "tolerancia_minutos": 0},
         {"id": "3b-03", "materia": "Ed. Física M", "dias": ["jueves"], "hora_inicio": "08:00", "hora_fin": "09:00", "tolerancia_minutos": 0},
-        {"id": "3b-04", "materia": "Ed. Física V", "dias": ["jueves"], "hora_inicio": "09:00", "hora_fin": "0:00", "tolerancia_minutos": 0},
-        {"id": "3b-05", "materia": "FVT", "dias": ["jueves"], "hora_inicio": "0:40", "hora_fin": "12:00", "tolerancia_minutos": 0}
+        {"id": "3b-04", "materia": "Ed. Física V", "dias": ["jueves"], "hora_inicio": "09:00", "hora_fin": "10:00", "tolerancia_minutos": 0},
+        {"id": "3b-05", "materia": "FVT", "dias": ["jueves"], "hora_inicio": "10:40", "hora_fin": "12:00", "tolerancia_minutos": 0}
       ]
     },
     "4A": {
-      "turno_habitual": {"hora_entrada": "07:15", "tolerancia_minutos": 0},
+      "turno_habitual": {
+        "lunes": {"hora_entrada": "07:15", "hora_fin": "13:00", "tolerancia_minutos": 0},
+        "martes": {"hora_entrada": "07:15", "hora_fin": "13:00", "tolerancia_minutos": 0},
+        "miercoles": {"hora_entrada": "07:15", "hora_fin": "13:00", "tolerancia_minutos": 0},
+        "jueves": {"hora_entrada": "07:15", "hora_fin": "12:20", "tolerancia_minutos": 0},
+        "viernes": {"hora_entrada": "07:15", "hora_fin": "13:00", "tolerancia_minutos": 0}
+      },
       "contraturnos": [
         {"id": "4a-01", "materia": "Ed. Física V", "dias": ["martes", "jueves"], "hora_inicio": "14:30", "hora_fin": "15:30", "tolerancia_minutos": 0},
         {"id": "4a-02", "materia": "Ed. Física M", "dias": ["martes", "jueves"], "hora_inicio": "16:30", "hora_fin": "17:30", "tolerancia_minutos": 0}
       ]
     },
     "4B": {
-      "turno_habitual": {"hora_entrada": "07:15", "tolerancia_minutos": 0},
+      "turno_habitual": {
+        "lunes": {"hora_entrada": "07:15", "hora_fin": "12:20", "tolerancia_minutos": 0},
+        "martes": {"hora_entrada": "07:15", "hora_fin": "11:35", "tolerancia_minutos": 0},
+        "miercoles": {"hora_entrada": "07:15", "hora_fin": "12:20", "tolerancia_minutos": 0},
+        "jueves": {"hora_entrada": "07:15", "hora_fin": "13:00", "tolerancia_minutos": 0},
+        "viernes": {"hora_entrada": "07:15", "hora_fin": "10:55", "tolerancia_minutos": 0}
+      },
       "contraturnos": [
         {"id": "4b-01", "materia": "Ed. Física V", "dias": ["martes", "jueves"], "hora_inicio": "14:30", "hora_fin": "15:30", "tolerancia_minutos": 0},
         {"id": "4b-02", "materia": "Geografía", "dias": ["miercoles"], "hora_inicio": "16:05", "hora_fin": "17:25", "tolerancia_minutos": 0},
@@ -61,7 +109,13 @@
       ]
     },
     "5A": {
-      "turno_habitual": {"hora_entrada": "07:15", "tolerancia_minutos": 0},
+      "turno_habitual": {
+        "lunes": {"hora_entrada": "09:20", "hora_fin": "13:00", "tolerancia_minutos": 0},
+        "martes": {"hora_entrada": "07:15", "hora_fin": "12:20", "tolerancia_minutos": 0},
+        "miercoles": {"hora_entrada": "07:15", "hora_fin": "12:20", "tolerancia_minutos": 0},
+        "jueves": {"hora_entrada": "07:15", "hora_fin": "13:00", "tolerancia_minutos": 0},
+        "viernes": {"hora_entrada": "07:15", "hora_fin": "12:20", "tolerancia_minutos": 0}
+      },
       "contraturnos": [
         {"id": "5a-01", "materia": "ERE", "dias": ["miercoles"], "hora_inicio": "13:30", "hora_fin": "14:50", "tolerancia_minutos": 0},
         {"id": "5a-02", "materia": "Arte Cultura y Sociedad", "dias": ["jueves"], "hora_inicio": "13:30", "hora_fin": "15:30", "tolerancia_minutos": 0},
@@ -71,7 +125,13 @@
       ]
     },
     "5B": {
-      "turno_habitual": {"hora_entrada": "07:15", "tolerancia_minutos": 0},
+      "turno_habitual": {
+        "lunes": {"hora_entrada": "07:15", "hora_fin": "13:00", "tolerancia_minutos": 0},
+        "martes": {"hora_entrada": "08:40", "hora_fin": "13:00", "tolerancia_minutos": 0},
+        "miercoles": {"hora_entrada": "07:15", "hora_fin": "10:55", "tolerancia_minutos": 0},
+        "jueves": {"hora_entrada": "07:15", "hora_fin": "11:35", "tolerancia_minutos": 0},
+        "viernes": {"hora_entrada": "07:15", "hora_fin": "13:00", "tolerancia_minutos": 0}
+      },
       "contraturnos": [
         {"id": "5b-01", "materia": "ERE", "dias": ["miercoles"], "hora_inicio": "13:30", "hora_fin": "14:50", "tolerancia_minutos": 0},
         {"id": "5b-02", "materia": "Arte Cultura y Sociedad", "dias": ["jueves"], "hora_inicio": "13:30", "hora_fin": "15:30", "tolerancia_minutos": 0},
@@ -82,7 +142,13 @@
       ]
     },
     "6A": {
-      "turno_habitual": {"hora_entrada": "07:15"},
+      "turno_habitual": {
+        "lunes": {"hora_entrada": "07:15", "hora_fin": "12:20", "tolerancia_minutos": 0},
+        "martes": {"hora_entrada": "07:15", "hora_fin": "13:00", "tolerancia_minutos": 0},
+        "miercoles": {"hora_entrada": "07:15", "hora_fin": "13:00", "tolerancia_minutos": 0},
+        "jueves": {"hora_entrada": "07:15", "hora_fin": "13:00", "tolerancia_minutos": 0},
+        "viernes": {"hora_entrada": "07:15", "hora_fin": "13:00", "tolerancia_minutos": 0}
+      },
       "contraturnos": [
         {"id": "6a-01", "materia": "Soc. Cult. y Com.", "dias": ["miercoles"], "hora_inicio": "15:00", "hora_fin": "17:00", "tolerancia_minutos": 0},
         {"id": "6a-02", "materia": "Ed. Física V", "dias": ["lunes"], "hora_inicio": "15:30", "hora_fin": "16:30", "tolerancia_minutos": 0},
@@ -91,13 +157,19 @@
       ]
     },
     "6B": {
-      "turno_habitual": {"hora_entrada": "07:15", "tolerancia_minutos": 0},
+      "turno_habitual": {
+        "lunes": {"hora_entrada": "07:15", "hora_fin": "12:20", "tolerancia_minutos": 0},
+        "martes": {"hora_entrada": "07:15", "hora_fin": "11:35", "tolerancia_minutos": 0},
+        "miercoles": {"hora_entrada": "07:15", "hora_fin": "12:20", "tolerancia_minutos": 0},
+        "jueves": {"hora_entrada": "07:15", "hora_fin": "12:20", "tolerancia_minutos": 0},
+        "viernes": {"hora_entrada": "07:15", "hora_fin": "13:00", "tolerancia_minutos": 0}
+      },
       "contraturnos": [
         {"id": "6b-01", "materia": "API.", "dias": ["lunes"], "hora_inicio": "16:30", "hora_fin": "19:05", "tolerancia_minutos": 0},
-        {"id": "6b-01", "materia": "DSI.", "dias": ["martes", "miercoles"], "hora_inicio": "16:00", "hora_fin": "17:30", "tolerancia_minutos": 0},
-        {"id": "6b-02", "materia": "Ed. Física V", "dias": ["lunes"], "hora_inicio": "15:30", "hora_fin": "16:30", "tolerancia_minutos": 0},
-        {"id": "6b-03", "materia": "Ed. Física M", "dias": ["martes", "jueves"], "hora_inicio": "17:30", "hora_fin": "18:30", "tolerancia_minutos": 0},
-        {"id": "6b-04", "materia": "Ed. Física V", "dias": ["viernes"], "hora_inicio": "17:30", "hora_fin": "18:30", "tolerancia_minutos": 0}
+        {"id": "6b-02", "materia": "DSI.", "dias": ["martes", "miercoles"], "hora_inicio": "16:00", "hora_fin": "17:30", "tolerancia_minutos": 0},
+        {"id": "6b-03", "materia": "Ed. Física V", "dias": ["lunes"], "hora_inicio": "15:30", "hora_fin": "16:30", "tolerancia_minutos": 0},
+        {"id": "6b-04", "materia": "Ed. Física M", "dias": ["martes", "jueves"], "hora_inicio": "17:30", "hora_fin": "18:30", "tolerancia_minutos": 0},
+        {"id": "6b-05", "materia": "Ed. Física V", "dias": ["viernes"], "hora_inicio": "17:30", "hora_fin": "18:30", "tolerancia_minutos": 0}
       ]
     }
   },

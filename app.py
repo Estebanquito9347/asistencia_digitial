@@ -20,7 +20,7 @@ from routes.api import create_blueprint
 def configurar_logging():
     logging.basicConfig(
         level=getattr(logging, Config.LOG_LEVEL, logging.INFO),
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        format="%(asctime)s [%(levelname)s] [%(name)s]: %(message)s",
         datefmt="%H:%M:%S",
     )
 
@@ -42,10 +42,7 @@ def create_app() -> Flask:
     )
     gestor_rostros.entrenar()
 
-    # A diferencia de GestorRostros/GestorHorarios, acá NO se prueba la
-    # conexión al arrancar: el lector puede estar apagado/desconectado
-    # de la red sin que eso tumbe el resto del sistema. La preceptora
-    # prueba la conexión a demanda desde el panel (/api/conectar-lector).
+    # Lector de huella en red (ZKTeco)
     gestor_huella_red = GestorHuellaRed(
         ip=Config.HUELLA_RED_IP,
         puerto=Config.HUELLA_RED_PUERTO,
@@ -54,6 +51,7 @@ def create_app() -> Flask:
         archivo_mapeo=Config.ARCHIVO_MAPEO_HUELLA_RED,
     )
 
+    # Blueprint que centraliza las rutas web y APIs (incluyendo gestión de horarios)
     bp = create_blueprint(
         gestor_rostros=gestor_rostros,
         registro_asistencia=registro_asistencia,

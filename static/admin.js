@@ -178,13 +178,16 @@ function reentrenar() {
 // ------------------------------------------------------------------
 // TAB En vivo
 // ------------------------------------------------------------------
+let cursosDatosEnVivo = []; // Guardamos los datos globales para el modal
+
 function cargarTiempoReal() {
     fetch('/admin/api/tiempo_real')
         .then(res => res.json())
         .then(data => {
             document.getElementById('horaActualizacionEnVivo').innerText =
                 `Actualizado a las ${data.hora_actualizacion}`;
-            renderizarTiempoReal(data.cursos || []);
+            cursosDatosEnVivo = data.cursos || [];
+            renderizarTiempoReal(cursosDatosEnVivo);
         })
         .catch(err => console.error('Error al cargar tiempo real:', err));
 }
@@ -197,40 +200,59 @@ function renderizarTiempoReal(cursos) {
         return;
     }
 
-    contenedor.innerHTML = cursos.map(c => {
+    contenedor.innerHTML = cursos.map((c, index) => {
         const porcentaje = c.total_alumnos > 0 ? Math.round((c.presentes / c.total_alumnos) * 100) : 0;
         const color = porcentaje >= 80 ? '#10b981' : porcentaje >= 50 ? '#f59e0b' : '#ef4444';
-        const idAusentes = `ausentes-${c.curso}`;
 
         return `
-            <div class="panel" style="padding:14px;">
+            <div class="panel" style="padding:14px; cursor:pointer;" onclick="abrirModalDetallePorIndex(${index})">
                 <div style="display:flex; justify-content:space-between; align-items:baseline;">
-                    <strong style="font-size:16px;">${c.curso}</strong>
-                    <span style="font-size:12px; color:#6b7280;">${c.turno_vigente}</span>
+                    <strong style="font-size:18px;">${c.curso}</strong>
+                    <span style="font-size:13px; color:#6b7280;">${c.turno_vigente}</span>
                 </div>
-                <div style="font-size:24px; font-weight:bold; margin:6px 0;">
-                    ${c.presentes} / ${c.total_alumnos}
+                <div style="font-size:26px; font-weight:bold; margin:8px 0;">
+                    ${c.presentes} / ${c.total_alumnos} presentes
                 </div>
-                <div style="background:#f3f4f6; border-radius:6px; height:8px; overflow:hidden;">
+                <div style="background:#f3f4f6; border-radius:6px; height:10px; overflow:hidden;">
                     <div style="background:${color}; width:${porcentaje}%; height:100%;"></div>
                 </div>
-                ${c.ausentes.length > 0 ? `
-                    <button style="width:auto; margin-top:10px; font-size:12px; padding:4px 8px;"
-                            onclick="toggleAusentes('${idAusentes}')">
-                        Ver ${c.ausentes.length} ausente(s)
-                    </button>
-                    <ul id="${idAusentes}" style="display:none; margin:8px 0 0; padding-left:18px; font-size:13px;">
-                        ${c.ausentes.map(a => `<li>${a}</li>`).join('')}
-                    </ul>
-                ` : `<div style="margin-top:10px; color:#10b981; font-size:13px;">✅ Están todos</div>`}
+                <div style="margin-top:10px; color:#2563eb; font-size:14px; font-weight:500;">
+                    🔍 Hacer clic para ver la lista completa
+                </div>
             </div>
         `;
     }).join('');
 }
 
-function toggleAusentes(id) {
-    const lista = document.getElementById(id);
-    lista.style.display = lista.style.display === 'none' ? 'block' : 'none';
+// Funciones para la ventana flotante (Modal)
+function abrirModalDetallePorIndex(index) {
+    const cursoObj = cursosDatosEnVivo[index];
+    if (!cursoObj) return;
+
+    document.getElementById("modalTituloCurso").innerText = `Curso: ${cursoObj.curso}`;
+    document.getElementById("modalSubtituloTurno").innerText = `Franja actual: ${cursoObj.turno_vigente} — Presentes: ${cursoObj.presentes} / ${cursoObj.total_alumnos}`;
+    
+    let ul = document.getElementById("modalListaAlumnos");
+    ul.innerHTML = "";
+    
+    cursoObj.alumnos.forEach(item => {
+        let li = document.createElement("li");
+        li.style.padding = "10px 0";
+        li.style.borderBottom = "1px solid #eee";
+        
+        if (item.presente) {
+            li.innerHTML = `✅ <span style="font-weight: 600; font-size: 1.15rem;">${item.nombre}</span> <span style="float: right; color: green; font-weight: bold; font-size: 1rem;">Presente</span>`;
+        } else {
+            li.innerHTML = `⏳ <span style="color: #666; font-size: 1.15rem;">${item.nombre}</span> <span style="float: right; color: #999; font-size: 1rem;">Pendiente</span>`;
+        }
+        ul.appendChild(li);
+    });
+
+    document.getElementById("modalDetalleCurso").style.display = "flex";
+}
+
+function cerrarModalDetalle() {
+    document.getElementById("modalDetalleCurso").style.display = "none";
 }
 
 // ------------------------------------------------------------------

@@ -108,6 +108,19 @@
             </div>
 
         </div>
+
+        <!-- Ventana flotante (Modal) para ver la lista en grande -->
+        <div id="modalDetalleCurso" class="modal-asistencia">
+            <div class="modal-contenido">
+                <button class="btn-cerrar-modal" onclick="cerrarModalDetalle()">&times;</button>
+                <h2 id="modalTituloCurso" style="margin-top: 0;">Detalle del Curso</h2>
+                <p id="modalSubtituloTurno" style="color: #666; font-size: 1.1rem;"></p>
+                <hr>
+                <ul id="modalListaAlumnos" style="list-style-type: none; padding: 0;" class="lista-curso-grande">
+                    <!-- Los alumnos se cargan acá dinámicamente -->
+                </ul>
+            </div>
+        </div>
     </main>
 
     <script src="{{ url_for('static', filename='admin.js') }}"></script>

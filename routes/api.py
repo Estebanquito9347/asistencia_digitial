@@ -139,10 +139,6 @@ def create_blueprint(gestor_rostros, registro_asistencia, gestor_horarios, gesto
     @bp.route("/admin/api/tiempo_real", methods=["GET"])
     @requiere_admin
     def admin_tiempo_real():
-        """Para cada curso: qué franja está pasando AHORA (según el
-        horario), cuántos alumnos hay en total, cuántos ya se presentaron
-        para esa franja puntual, y quiénes faltan. Pensado para dejar
-        abierto y actualizándose solo mientras entran los alumnos."""
         ahora = datetime.now()
         cursos = []
         if os.path.exists(carpeta_rostros):
@@ -155,14 +151,22 @@ def create_blueprint(gestor_rostros, registro_asistencia, gestor_horarios, gesto
             registros_hoy = registro_asistencia.registros_de_hoy(curso=curso)
 
             presentes_nombres = {r["Alumno"] for r in registros_hoy if r.get("Turno") == turno_vigente}
-            ausentes = [a for a in alumnos if a not in presentes_nombres]
+            
+            # Lista completa con estado para que no se borren
+            lista_alumnos = []
+            for alumno in sorted(alumnos):
+                esta_presente = alumno in presentes_nombres
+                lista_alumnos.append({
+                    "nombre": alumno,
+                    "presente": esta_presente
+                })
 
             resultado.append({
                 "curso": curso,
                 "turno_vigente": turno_vigente,
                 "total_alumnos": len(alumnos),
                 "presentes": len(presentes_nombres),
-                "ausentes": ausentes,
+                "alumnos": lista_alumnos,
             })
 
         return jsonify({"cursos": resultado, "hora_actualizacion": ahora.strftime("%H:%M:%S")})
@@ -191,16 +195,19 @@ def create_blueprint(gestor_rostros, registro_asistencia, gestor_horarios, gesto
     def admin_guardar_turno_habitual():
         data = request.get_json(silent=True) or {}
         curso = (data.get("curso") or "").strip()
+        dia = (data.get("dia") or "").strip().lower()  # Ej: "lunes", "martes", etc.
         hora_entrada = (data.get("hora_entrada") or "").strip()
-        tolerancia_minutos = data.get("tolerancia_minutos", 10)
+        hora_fin = (data.get("hora_fin") or "").strip()
+        tolerancia_minutos = data.get("tolerancia_minutos", 0)
 
-        if not curso or not hora_entrada:
-            return jsonify({"ok": False, "mensaje": "Faltan 'curso' o 'hora_entrada'"}), 400
+        if not curso or not dia or not hora_entrada or not hora_fin:
+            return jsonify({"ok": False, "mensaje": "Faltan datos obligatorios (curso, día, hora de entrada o hora de fin)"}), 400
 
         try:
-            gestor_horarios.establecer_turno_habitual(curso, hora_entrada, tolerancia_minutos)
-        except ValueError:
-            return jsonify({"ok": False, "mensaje": "Formato de hora inválido (usar HH:MM)"}), 400
+            # Asegurate de que tu clase GestorHorarios reciba estos parámetros
+            gestor_horarios.establecer_turno_habitual(curso, dia, hora_entrada, hora_fin, tolerancia_minutos)
+        except ValueError as e:
+            return jsonify({"ok": False, "mensaje": str(e)}), 400
 
         return jsonify({"ok": True})
 
