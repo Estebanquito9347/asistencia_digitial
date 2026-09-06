@@ -41,6 +41,7 @@ logger = logging.getLogger(__name__)
 
 DIAS_SEMANA = ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"]
 TURNO_HABITUAL_DEFAULT = {"hora_entrada": "08:00", "tolerancia_minutos": 10}
+MINUTOS_ANTICIPACION = 20
 
 
 def _dia_de_hoy(momento: datetime) -> str:
@@ -215,55 +216,105 @@ class GestorHorarios:
     # Cálculo de estado al tomar asistencia
     # ------------------------------------------------------------------
     def _elegir_franja_vigente(self, curso: str, momento: datetime):
+        """Un contraturno manda SOLO mientras dura (de su hora de inicio
+        a su hora de fin, más el margen de tolerancia). Fuera de esa
+        ventana puntual, rige directamente el turno habitual del curso
+        — así una clase que ya terminó hace horas no se queda "pegada"
+        como si siguiera pasando."""
         cfg = self.obtener(curso)
         dia_hoy = _dia_de_hoy(momento)
-
-        turno_hab_raw = cfg["turno_habitual"]
         
-        # Obtenemos el habitual del día actual de forma segura
-        if dia_hoy in turno_hab_raw and isinstance(turno_hab_raw[dia_hoy], dict):
-            habitual_hoy = turno_hab_raw[dia_hoy]
-        elif "hora_entrada" in turno_hab_raw:
-            # Compatibilidad con formato viejo si lo hubiera
-            habitual_hoy = {"hora_entrada": turno_hab_raw["hora_entrada"], "hora_fin": "18:00", "tolerancia_minutos": turno_hab_raw.get("tolerancia_minutos", 10)}
+        # --- NUEVO: Verificar si hay una excepción de horario para ESTA fecha exacta ---
+        fecha_str = momento.strftime("%Y-%m-%d")
+        excepciones_fecha = cfg.get("excepciones_fecha", {})
+        
+        if fecha_str in excepciones_fecha:
+            exc = excepciones_fecha[fecha_str]
+            # Creamos un habitual temporal con la hora modificada por la preceptora
+            habitual = {
+                "hora_entrada": exc["hora_entrada"],
+                "tolerancia_minutos": exc.get("tolerancia_minutos", cfg.get("turno_habitual", {}).get("tolerancia_minutos", 10))
+            }
         else:
-            habitual_hoy = {"hora_entrada": "08:00", "hora_fin": "12:00", "tolerancia_minutos": 10}
+            habitual = cfg["turno_habitual"]
+        # -----------------------------------------------------------------------------
 
-        candidatos = []
+        contraturnos_de_hoy = [c for c in cfg["contraturnos"] if dia_hoy in c["dias"]]
+        activos_ahora = []
+        for c in contraturnos_de_hoy:
+            inicio = datetime.strptime(c["hora_inicio"], "%H:%M").time()
+            fin = datetime.strptime(c["hora_fin"], "%H:%M").time()
 
-        # Verificamos si el turno habitual de hoy ya terminó o sigue vigente
-        if "hora_fin" in habitual_hoy:
-            hora_fin_hab = datetime.strptime(habitual_hoy["hora_fin"], "%H:%M").time()
-            limite_fin_hab = (datetime.combine(momento.date(), hora_fin_hab) + timedelta(minutes=habitual_hoy.get("tolerancia_minutos", 10))).time()
-            if momento.time() <= limite_fin_hab:
-                candidatos.append(("Habitual", habitual_hoy))
-        else:
-            candidatos.append(("Habitual", habitual_hoy))
+            limite_temprano = (
+                datetime.combine(momento.date(), inicio) - timedelta(minutes=MINUTOS_ANTICIPACION)
+            ).time()
+            limite_tarde = (
+                datetime.combine(momento.date(), fin) + timedelta(minutes=c["tolerancia_minutos"])
+            ).time()
 
-        # Sumamos los contraturnos válidos que no hayan terminado
-        for c in cfg["contraturnos"]:
-            if dia_hoy in c["dias"]:
-                hora_fin_c = datetime.strptime(c["hora_fin"], "%H:%M").time()
-                limite_fin_c = (datetime.combine(momento.date(), hora_fin_c) + timedelta(minutes=c["tolerancia_minutos"])).time()
-                
-                if momento.time() <= limite_fin_c:
-                    candidatos.append((c["materia"], c))
+            if limite_temprano <= momento.time() <= limite_tarde:
+                activos_ahora.append(c)
 
-        if not candidatos:
-            # Si por horario ya pasó todo, devolvemos el habitual por defecto para no romper
-            return ("Habitual", habitual_hoy)
+        if activos_ahora:
+            # Si por algún motivo se superponen dos contraturnos, gana el
+            # que empezó más tarde (el más específico para este momento).
+            elegido = max(activos_ahora, key=lambda c: datetime.strptime(c["hora_inicio"], "%H:%M").time())
+            return elegido["materia"], elegido
 
-        # Filtramos cuáles candidatos ya empezaron
-        vigentes = [
-            (nombre, franja) for nombre, franja in candidatos
-            if datetime.strptime(self._hora_inicio(franja), "%H:%M").time() <= momento.time()
-        ]
+        return "Habitual", habitual
 
-        if vigentes:
-            return max(vigentes, key=lambda par: datetime.strptime(self._hora_inicio(par[1]), "%H:%M").time())
-        return min(candidatos, key=lambda par: datetime.strptime(self._hora_inicio(par[1]), "%H:%M").time())
+    def franja_vigente(self, curso: str, momento: datetime) -> str:
+        """Nombre de la franja horaria vigente AHORA MISMO para ese curso
+        ('Habitual' o el nombre de la materia en curso), sin registrar
+        nada ni calcular tardanza — pensado para un panel en tiempo real."""
+        nombre, _franja = self._elegir_franja_vigente(curso, momento)
+        return nombre
 
-    def franja_vigente(self, curso: str, ahora: datetime) -> str:
-        """Método público que llama el panel de tiempo real de Flask"""
-        nombre_franja, _ = self._elegir_franja_vigente(curso, ahora)
-        return nombre_franja
+    def calcular_estado(self, curso: str, momento: datetime) -> dict:
+        """Devuelve {'turno': <nombre de la franja vigente>, 'estado': 'PRESENTE'|'TARDE'}."""
+        nombre, franja = self._elegir_franja_vigente(curso, momento)
+        hora_inicio = datetime.strptime(self._hora_inicio(franja), "%H:%M").time()
+
+        if momento.time() < hora_inicio:
+            # Llegó antes de que empezara esta franja: presente, llegó temprano.
+            return {"turno": nombre, "estado": "PRESENTE"}
+
+        limite = (
+            datetime.combine(momento.date(), hora_inicio) + timedelta(minutes=franja["tolerancia_minutos"])
+        ).time()
+
+        estado = "PRESENTE" if momento.time() <= limite else "TARDE"
+        return {"turno": nombre, "estado": estado}
+    # ------------------------------------------------------------------
+    # Excepciones por fecha
+    # ------------------------------------------------------------------
+    def agregar_excepcion_fecha(self, curso: str, fecha: str, hora_entrada: str, tolerancia_minutos: int = 10) -> None:
+        self._validar_hora(hora_entrada)
+        with self._lock:
+            self._datos["cursos"].setdefault(curso, {})
+            self._datos["cursos"][curso].setdefault("excepciones_fecha", {})
+            self._datos["cursos"][curso]["excepciones_fecha"][fecha] = {
+                "hora_entrada": hora_entrada,
+                "tolerancia_minutos": int(tolerancia_minutos),
+            }
+            self._guardar()
+            logger.info("Excepción de fecha agregada a %s para el día %s: entra %s", curso, fecha, hora_entrada)
+
+    def obtener_excepciones(self) -> dict:
+        """Devuelve un diccionario con las excepciones de todos los cursos."""
+        resultado = {}
+        for curso, cfg in self._datos["cursos"].items():
+            excepciones = cfg.get("excepciones_fecha", {})
+            if excepciones:
+                resultado[curso] = excepciones
+        return resultado
+
+    def eliminar_excepcion_fecha(self, curso: str, fecha: str) -> bool:
+        with self._lock:
+            excepciones = self._datos["cursos"].get(curso, {}).get("excepciones_fecha", {})
+            if fecha in excepciones:
+                del excepciones[fecha]
+                self._guardar()
+                logger.info("Excepción de fecha eliminada para %s en el día %s", curso, fecha)
+                return True
+        return False

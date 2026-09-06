@@ -107,6 +107,34 @@
                 <div id="listaIngles"></div>
             </div>
 
+                        <!-- NUEVO PANEL: Excepción de entrada por día específico -->
+            <div class="panel" style="margin-bottom: 20px;">
+                <h3 style="margin-top: 0;">Excepción de entrada por fecha (Profesor que entra tarde)</h3>
+                <p class="texto-ayuda" style="color: #6b7280; font-size: 14px;">
+                    Elegí un curso, una fecha puntual y la nueva hora de entrada. Esto solo afectará la tolerancia y asistencia de ese día.
+                </p>
+                
+                <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 15px;">
+                    <label>Curso: 
+                        <select id="excepcionCurso" style="padding: 8px; border-radius: 6px; border: 1px solid #d1d5db;">
+                            <!-- Se llena automáticamente con JS -->
+                        </select>
+                    </label>
+                    <label>Fecha: 
+                        <input type="date" id="excepcionFecha" style="padding: 7px; border-radius: 6px; border: 1px solid #d1d5db;">
+                    </label>
+                    <label>Nueva hora de entrada: 
+                        <input type="time" id="excepcionHora" value="07:20" style="padding: 7px; border-radius: 6px; border: 1px solid #d1d5db;">
+                    </label>
+                </div>
+                <button onclick="guardarExcepcionFecha()">Guardar excepción para este día</button>
+
+                <h4 style="margin-top: 20px;">Excepciones guardadas</h4>
+                <div id="contenedorExcepciones">
+                    <p class="texto-ayuda">Cargando excepciones...</p>
+                </div>
+            </div>
+
         </div>
 
         <!-- Ventana flotante (Modal) para ver la lista en grande -->

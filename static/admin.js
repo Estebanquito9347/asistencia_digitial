@@ -59,11 +59,19 @@ function cargarCursos() {
         .then(res => res.json())
         .then(data => {
             listaCursos = data.cursos || [];
+            
+            // 1. Llenar los checkboxes de la pestaña horarios (lo que ya tenías)
             document.getElementById('checkboxCursos').innerHTML = listaCursos.map(curso => `
                 <label class="checkbox-curso">
                     <input type="checkbox" value="${curso}"> ${curso}
                 </label>
             `).join('');
+
+            // 2. NUEVO: Llenar también el selector del panel de excepciones
+            const selectCurso = document.getElementById('excepcionCurso');
+            if (selectCurso) {
+                selectCurso.innerHTML = listaCursos.map(c => `<option value="${c}">${c}</option>`).join('');
+            }
         })
         .catch(err => console.error('Error al cargar cursos:', err));
 }
@@ -235,7 +243,10 @@ function abrirModalDetallePorIndex(index) {
     let ul = document.getElementById("modalListaAlumnos");
     ul.innerHTML = "";
     
-    cursoObj.alumnos.forEach(item => {
+    // PROTECCIÓN: Usamos '|| []' para evitar que explote si alumnos llega undefined
+    const listaAlumnos = cursoObj.alumnos || [];
+    
+    listaAlumnos.forEach(item => {
         let li = document.createElement("li");
         li.style.padding = "10px 0";
         li.style.borderBottom = "1px solid #eee";
@@ -289,6 +300,7 @@ function cargarHorarios() {
         .then(data => {
             renderizarAcordeonCursos(data.cursos || {});
             renderizarGruposTransversales(data.grupos_transversales || {});
+            cargarExcepciones(); 
         })
         .catch(err => console.error('Error al cargar horarios:', err));
 }
@@ -461,4 +473,116 @@ function renderizarGruposTransversales(grupos) {
             </div>
         `;
     }).join('');
+}
+
+// ------------------------------------------------------------------
+// Grupos transversales (Inglés) — informativo
+// ------------------------------------------------------------------
+function renderizarGruposTransversales(grupos) {
+    const contenedor = document.getElementById('listaIngles');
+    const nombres = Object.keys(grupos).sort();
+
+    if (nombres.length === 0) {
+        contenedor.innerHTML = '<p class="texto-ayuda">No hay niveles cargados todavía.</p>';
+        return;
+    }
+
+    contenedor.innerHTML = nombres.map(nombre => {
+        const g = grupos[nombre];
+        return `
+            <div class="tarjeta-contraturno">
+                <div><strong>${nombre}</strong></div>
+                <div>${badgesDias(g.dias)}</div>
+                <div>${g.hora_inicio} a ${g.hora_fin}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+
+// ==================================================================
+// NUEVO: Excepciones de entrada por fecha específica
+// ==================================================================
+
+function guardarExcepcionFecha() {
+    const curso = document.getElementById('excepcionCurso').value;
+    const fecha = document.getElementById('excepcionFecha').value;
+    const hora_entrada = document.getElementById('excepcionHora').value;
+
+    if (!curso || !fecha || !hora_entrada) {
+        alert('Por favor completá todos los campos (curso, fecha y hora).');
+        return;
+    }
+
+    fetch('/admin/api/horarios/excepcion_fecha', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ curso, fecha, hora_entrada })
+    })
+    .then(res => res.json())
+    .then(data => {
+        statusAdmin.innerText = data.ok ? `✅ Excepción guardada para ${curso} el ${fecha}` : `❌ ${data.mensaje}`;
+        if (data.ok) {
+            cargarExcepciones();
+        }
+    })
+    .catch(err => {
+        console.error('Error al guardar excepción:', err);
+        statusAdmin.innerText = '❌ Error de conexión';
+    });
+}
+
+function cargarExcepciones() {
+    fetch('/admin/api/horarios/excepciones')
+        .then(res => res.json())
+        .then(data => {
+            const contenedor = document.getElementById('contenedorExcepciones');
+            const excepciones = data.excepciones || {};
+            
+            // Llenar también el selector de cursos del panel de excepciones si está vacío
+            const selectCurso = document.getElementById('excepcionCurso');
+            if (selectCurso && listaCursos.length > 0 && selectCurso.children.length === 0) {
+                selectCurso.innerHTML = listaCursos.map(c => `<option value="${c}">${c}</option>`).join('');
+            }
+
+            const keys = Object.keys(excepciones);
+            if (!contenedor) return;
+
+            if (keys.length === 0) {
+                contenedor.innerHTML = '<p class="texto-ayuda">No hay excepciones cargadas por el momento.</p>';
+                return;
+            }
+
+            contenedor.innerHTML = keys.map(key => {
+                const item = excepciones[key];
+                return `
+                    <div class="tarjeta-contraturno" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <div>
+                            <strong>${item.curso}</strong> — Fecha: <strong>${item.fecha}</strong> — Entran a las: <strong>${item.hora_entrada}</strong>
+                        </div>
+                        <button class="btn-danger" onclick="eliminarExcepcionFecha('${item.curso}', '${item.fecha}')">Eliminar</button>
+                    </div>
+                `;
+            }).join('');
+        })
+        .catch(err => console.error('Error al cargar excepciones:', err));
+}
+
+function eliminarExcepcionFecha(curso, fecha) {
+    if (!confirm(`¿Eliminar la excepción del ${fecha} para el curso ${curso}?`)) return;
+
+    fetch('/admin/api/horarios/excepcion_fecha/eliminar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ curso, fecha })
+    })
+    .then(res => res.json())
+    .then(data => {
+        statusAdmin.innerText = data.ok ? '✅ Excepción eliminada' : `❌ ${data.mensaje}`;
+        if (data.ok) cargarExcepciones();
+    })
+    .catch(err => {
+        console.error('Error al eliminar excepción:', err);
+        statusAdmin.innerText = '❌ Error de conexión';
+    });
 }

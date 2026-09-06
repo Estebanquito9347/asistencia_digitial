@@ -47,6 +47,41 @@ def create_blueprint(gestor_rostros, registro_asistencia, gestor_horarios, gesto
     # ==================================================================
     # KIOSCO PÚBLICO — lo único que ve el alumno
     # ==================================================================
+
+    @bp.route("/admin/api/horarios/excepciones", methods=["GET"])
+    @requiere_admin
+    def admin_listar_excepciones():
+        try:
+            excepciones_crudas = gestor_horarios.obtener_excepciones()
+            # Transformamos el diccionario para que el JS lo lea sin problemas de claves
+            lista_formateada = []
+            for curso, fechs in excepciones_crudas.items():
+                for fecha, datos in fechs.items():
+                    lista_formateada.append({
+                        "curso": curso,
+                        "fecha": fecha,
+                        "hora_entrada": datos.get("hora_entrada")
+                    })
+            return jsonify({"ok": True, "excepciones": lista_formateada})
+        except Exception as e:
+            return jsonify({"ok": False, "excepciones": []})
+
+    @bp.route("/admin/api/horarios/excepcion_fecha/eliminar", methods=["POST"])
+    @requiere_admin
+    def admin_eliminar_excepcion_fecha():
+        data = request.get_json(silent=True) or {}
+        curso = (data.get("curso") or "").strip()
+        fecha = (data.get("fecha") or "").strip()
+
+        if not curso or not fecha:
+            return jsonify({"ok": False, "mensaje": "Faltan 'curso' o 'fecha'"}), 400
+
+        try:
+            gestor_horarios.eliminar_excepcion_fecha(curso, fecha)
+            return jsonify({"ok": True})
+        except Exception as e:
+            return jsonify({"ok": False, "mensaje": str(e)}), 400
+
     @bp.route("/")
     def index():
         return render_template("index.html")
@@ -152,21 +187,24 @@ def create_blueprint(gestor_rostros, registro_asistencia, gestor_horarios, gesto
 
             presentes_nombres = {r["Alumno"] for r in registros_hoy if r.get("Turno") == turno_vigente}
             
-            # Lista completa con estado para que no se borren
-            lista_alumnos = []
-            for alumno in sorted(alumnos):
+            # Armamos la lista completa de alumnos con su estado para el modal
+            lista_alumnos_detalle = []
+            for alumno in alumnos:
                 esta_presente = alumno in presentes_nombres
-                lista_alumnos.append({
+                lista_alumnos_detalle.append({
                     "nombre": alumno,
                     "presente": esta_presente
                 })
+
+            ausentes = [a for a in alumnos if a not in presentes_nombres]
 
             resultado.append({
                 "curso": curso,
                 "turno_vigente": turno_vigente,
                 "total_alumnos": len(alumnos),
                 "presentes": len(presentes_nombres),
-                "alumnos": lista_alumnos,
+                "ausentes": ausentes,
+                "alumnos": lista_alumnos_detalle  # <--- Esto es lo que lee el JS del modal
             })
 
         return jsonify({"cursos": resultado, "hora_actualizacion": ahora.strftime("%H:%M:%S")})
@@ -195,19 +233,16 @@ def create_blueprint(gestor_rostros, registro_asistencia, gestor_horarios, gesto
     def admin_guardar_turno_habitual():
         data = request.get_json(silent=True) or {}
         curso = (data.get("curso") or "").strip()
-        dia = (data.get("dia") or "").strip().lower()  # Ej: "lunes", "martes", etc.
         hora_entrada = (data.get("hora_entrada") or "").strip()
-        hora_fin = (data.get("hora_fin") or "").strip()
-        tolerancia_minutos = data.get("tolerancia_minutos", 0)
+        tolerancia_minutos = data.get("tolerancia_minutos", 10)
 
-        if not curso or not dia or not hora_entrada or not hora_fin:
-            return jsonify({"ok": False, "mensaje": "Faltan datos obligatorios (curso, día, hora de entrada o hora de fin)"}), 400
+        if not curso or not hora_entrada:
+            return jsonify({"ok": False, "mensaje": "Faltan 'curso' o 'hora_entrada'"}), 400
 
         try:
-            # Asegurate de que tu clase GestorHorarios reciba estos parámetros
-            gestor_horarios.establecer_turno_habitual(curso, dia, hora_entrada, hora_fin, tolerancia_minutos)
-        except ValueError as e:
-            return jsonify({"ok": False, "mensaje": str(e)}), 400
+            gestor_horarios.establecer_turno_habitual(curso, hora_entrada, tolerancia_minutos)
+        except ValueError:
+            return jsonify({"ok": False, "mensaje": "Formato de hora inválido (usar HH:MM)"}), 400
 
         return jsonify({"ok": True})
 
@@ -251,6 +286,25 @@ def create_blueprint(gestor_rostros, registro_asistencia, gestor_horarios, gesto
             return jsonify({"ok": False, "mensaje": str(e)}), 400
 
         return jsonify({"ok": True, "id": contraturno_id})
+
+    @bp.route("/admin/api/horarios/excepcion_fecha", methods=["POST"])
+    @requiere_admin
+    def admin_guardar_excepcion_fecha():
+        data = request.get_json(silent=True) or {}
+        curso = (data.get("curso") or "").strip()
+        fecha = (data.get("fecha") or "").strip()
+        hora_entrada = (data.get("hora_entrada") or "").strip()
+        tolerancia_minutos = data.get("tolerancia_minutos", 10)
+
+        if not curso or not fecha or not hora_entrada:
+            return jsonify({"ok": False, "mensaje": "Faltan 'curso', 'fecha' o 'hora_entrada'"}), 400
+
+        try:
+            gestor_horarios.agregar_excepcion_fecha(curso, fecha, hora_entrada, tolerancia_minutos)
+        except ValueError:
+            return jsonify({"ok": False, "mensaje": "Formato de hora inválido (usar HH:MM)"}), 400
+
+        return jsonify({"ok": True})
 
     @bp.route("/admin/api/horarios/contraturno/editar", methods=["POST"])
     @requiere_admin
