@@ -1,14 +1,13 @@
 // static/app.js
 // ----------------
-// Cámara + confirmación manual, y enrolamiento/identificación de
-// huella por ID numérico (sensor Suprema).
+// Versión mínima: cámara + selección de curso + confirmación manual.
+// No hay persistencia todavía (ni CSV ni huella) — la confirmación
+// solo se refleja en la tabla en memoria de esta sesión.
 
 const video = document.getElementById('webcam');
 const statusBox = document.getElementById('status');
 const diagBox = document.getElementById('diagnostico');
 const cursoSelect = document.getElementById('cursoSelect');
-const btnEnrolar = document.getElementById('btnEnrolar');
-const statusHuella = document.getElementById('statusHuella');
 
 const confirmBox = document.getElementById('confirmacion');
 const confirmNombre = document.getElementById('confirmNombre');
@@ -84,7 +83,6 @@ function solicitarPermisoCamara() {
             video.srcObject = stream;
             diagBox.innerText = "";
             iniciarBucleAnalisis();
-            verificarSensorHuella();
         })
         .catch(err => {
             console.error('Error de getUserMedia:', err.name, err.message);
@@ -119,7 +117,7 @@ function iniciarBucleAnalisis() {
         .then(res => res.json())
         .then(data => {
             if (data.detectado && !esperandoConfirmacion) {
-                mostrarConfirmacion(data.alumno, data.curso, 'FACIAL');
+                mostrarConfirmacion(data.alumno, data.curso);
             } else if (!data.detectado && !esperandoConfirmacion) {
                 setStatus("🔍 Buscando alumnos...", null);
             }
@@ -129,11 +127,11 @@ function iniciarBucleAnalisis() {
 }
 
 // ------------------------------------------------------------------
-// Confirmación manual
+// Confirmación manual (sin persistencia todavía)
 // ------------------------------------------------------------------
-function mostrarConfirmacion(alumno, curso, metodo) {
+function mostrarConfirmacion(alumno, curso) {
     esperandoConfirmacion = true;
-    candidatoActual = { alumno, curso, metodo };
+    candidatoActual = { alumno, curso };
 
     confirmNombre.innerText = alumno;
     confirmCurso.innerText = curso;
@@ -158,10 +156,10 @@ function confirmarAsistencia() {
     .then(res => res.json())
     .then(data => {
         if (data.registrado) {
-            setStatus(`✅ PRESENTE: ${candidatoActual.alumno} (${candidatoActual.curso})`, 'ok');
-            actualizarTabla(candidatoActual.alumno, candidatoActual.metodo);
+            const etiqueta = data.estado === 'TARDE' ? '⏰ TARDE' : '✅ PRESENTE';
+            setStatus(`${etiqueta}: ${candidatoActual.alumno} (${candidatoActual.curso})`, 'ok');
         } else {
-            setStatus(`ℹ️ ${candidatoActual.alumno} ya estaba presente hoy`, 'ok');
+            setStatus(`ℹ️ ${candidatoActual.alumno} ya tenía registro hoy`, 'ok');
         }
     })
     .catch(err => {
@@ -181,60 +179,4 @@ function cerrarConfirmacion() {
     confirmBox.style.display = 'none';
     candidatoActual = null;
     setTimeout(() => { esperandoConfirmacion = false; }, 1500);
-}
-
-// ------------------------------------------------------------------
-// Biometría dactilar (por ahora solo confirma que el sensor identificó
-// un ID — falta unirlo con el nombre del alumno cuando tengamos la
-// tabla ALUMNOS)
-// ------------------------------------------------------------------
-function verificarSensorHuella() {
-    fetch('/estado_hardware')
-        .then(res => res.json())
-        .then(data => {
-            statusHuella.innerText = data.sensor_huella_disponible
-                ? "🟢 Sensor de huella conectado"
-                : "⚪ Sensor de huella no conectado (solo cámara por ahora)";
-        })
-        .catch(() => { statusHuella.innerText = "⚪ No se pudo consultar el estado del sensor"; });
-}
-
-function enrolarHuella() {
-    const idHuella = document.getElementById('idHuella').value;
-    if (!idHuella) { alert("Ingresá un ID numérico primero."); return; }
-
-    btnEnrolar.disabled = true;
-    statusHuella.innerText = `☝️ Pedile al alumno que apoye el dedo dos veces en el lector...`;
-
-    fetch('/enrolar_huella', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id_huella: parseInt(idHuella, 10) })
-    })
-    .then(res => res.json())
-    .then(data => {
-        statusHuella.innerText = data.ok ? `✅ ${data.mensaje}` : `❌ ${data.mensaje}`;
-    })
-    .catch(err => {
-        console.error('Error en /enrolar_huella:', err);
-        statusHuella.innerText = "❌ Error de conexión con el backend";
-    })
-    .finally(() => { btnEnrolar.disabled = false; });
-}
-
-// ------------------------------------------------------------------
-function actualizarTabla(nombre, metodo) {
-    const tabla = document.getElementById('tablaAsistencia');
-    const hora = new Date().toLocaleTimeString();
-    if (tabla.firstChild && tabla.firstChild.innerText.includes(nombre)) return;
-
-    tabla.insertAdjacentHTML('afterbegin', `<tr><td>${hora}</td><td>${nombre}</td><td>${metodo}</td></tr>`);
-
-    setTimeout(() => {
-        if (statusBox.innerText.includes(nombre)) setStatus("🔍 Buscando alumnos...", null);
-    }, 3000);
-}
-
-function descargarCSV() {
-    window.location.href = '/descargar_asistencia';
 }

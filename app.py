@@ -1,9 +1,8 @@
 """
 app.py
 ------
-Punto de entrada. Versión mínima: solo cámara + reconocimiento facial
-+ confirmación manual. Asistencia (CSV) y huella quedan aparte, para
-retomar más adelante.
+Punto de entrada. Arma la aplicación Flask: kiosco público, panel de
+la preceptora, y ahora también el lector de huella en red (ZKTeco).
 """
 
 import logging
@@ -11,6 +10,9 @@ import logging
 from flask import Flask
 
 from config import Config
+from core.asistencia import RegistroAsistencia
+from core.horarios import GestorHorarios
+from core.huella_red import GestorHuellaRed
 from core.reconocimiento_facial import GestorRostros
 from routes.api import create_blueprint
 
@@ -18,7 +20,7 @@ from routes.api import create_blueprint
 def configurar_logging():
     logging.basicConfig(
         level=getattr(logging, Config.LOG_LEVEL, logging.INFO),
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        format="%(asctime)s [%(levelname)s] [%(name)s]: %(message)s",
         datefmt="%H:%M:%S",
     )
 
@@ -26,19 +28,37 @@ def configurar_logging():
 def create_app() -> Flask:
     configurar_logging()
     app = Flask(__name__)
+    app.secret_key = Config.SECRET_KEY
+
+    registro_asistencia = RegistroAsistencia(carpeta_asistencia=Config.CARPETA_ASISTENCIA)
+    gestor_horarios = GestorHorarios(archivo_horarios=Config.ARCHIVO_HORARIOS)
 
     gestor_rostros = GestorRostros(
         carpeta_rostros=Config.CARPETA_ROSTROS,
-        archivo_modelo=Config.ARCHIVO_MODELO_ROSTROS,
-        umbral_distancia=Config.FACE_UMBRAL_DISTANCIA,
+        archivo_cache=Config.ARCHIVO_CACHE_ROSTROS,
+        tolerancia=Config.FACE_TOLERANCIA,
         margen_minimo=Config.FACE_MARGEN_MINIMO,
-        archivo_cascada=Config.ARCHIVO_CASCADA_ROSTROS,
+        escala_deteccion=Config.FACE_ESCALA_DETECCION,
     )
     gestor_rostros.entrenar()
 
+    # Lector de huella en red (ZKTeco)
+    gestor_huella_red = GestorHuellaRed(
+        ip=Config.HUELLA_RED_IP,
+        puerto=Config.HUELLA_RED_PUERTO,
+        timeout_seg=Config.HUELLA_RED_TIMEOUT,
+        password=Config.HUELLA_RED_PASSWORD,
+        archivo_mapeo=Config.ARCHIVO_MAPEO_HUELLA_RED,
+    )
+
+    # Blueprint que centraliza las rutas web y APIs (incluyendo gestión de horarios)
     bp = create_blueprint(
         gestor_rostros=gestor_rostros,
+        registro_asistencia=registro_asistencia,
+        gestor_horarios=gestor_horarios,
+        gestor_huella_red=gestor_huella_red,
         carpeta_rostros=Config.CARPETA_ROSTROS,
+        admin_pin=Config.ADMIN_PIN,
     )
     app.register_blueprint(bp)
 

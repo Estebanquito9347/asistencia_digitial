@@ -1,3 +1,10 @@
+/* =========================================
+   1. CONFIGURACIÓN BASE Y COLORES
+   ========================================= */
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
 :root {
     --primary: #1e3a8a;
     --success: #10b981;
@@ -14,6 +21,9 @@ body {
     color: var(--dark);
 }
 
+/* =========================================
+   2. ENCABEZADO Y CONTENEDORES
+   ========================================= */
 header {
     background-color: var(--primary);
     color: white;
@@ -21,81 +31,51 @@ header {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
     box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
 }
 
+header h2 { margin: 0; }
+header a { color: white; font-weight: bold; text-decoration: none; }
+header a:hover { text-decoration: underline; }
+
 .container {
     display: grid;
-    grid-template-columns: 2fr 1fr;
     gap: 25px;
     padding: 30px;
-    max-width: 1400px;
     margin: 0 auto;
+}
+
+/* Contenedor centralizado para el panel de preceptora */
+.container-single {
+    grid-template-columns: 1fr;
+    max-width: 1000px;
 }
 
 .panel {
     background: white;
-    padding: 20px;
+    padding: 25px;
     border-radius: 12px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+    overflow-x: auto;
+    margin-bottom: 25px;
 }
 
-.video-container {
-    position: relative;
-    background: #000;
-    border-radius: 8px;
-    overflow: hidden;
-    width: 100%;
-    max-width: 640px;
-    margin: 0 auto;
-    min-height: 240px;
-}
-
-video {
-    width: 100%;
-    height: auto;
-    display: block;
-    transform: scaleX(-1); /* Espejo */
-}
-
-.status-box {
-    margin-top: 15px;
-    padding: 12px;
-    border-radius: 6px;
-    font-weight: bold;
-    text-align: center;
-    background: #e5e7eb;
-    transition: all 0.3s ease;
-}
-.status-box.error { background: #fee2e2; color: #991b1b; }
-.status-box.ok { background: #d1fae5; color: #065f46; }
-
-.diag-box {
-    margin-top: 8px;
-    font-size: 12px;
-    color: #6b7280;
-    text-align: center;
-}
-
-.control-group { margin-bottom: 20px; }
-
-select, input, button {
-    width: 100%;
-    padding: 10px;
-    margin-top: 5px;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
-    box-sizing: border-box;
-    font-size: 14px;
-}
-
+/* =========================================
+   3. BOTONES Y PESTAÑAS (TABS)
+   ========================================= */
 button {
     background-color: var(--primary);
     color: white;
     border: none;
     cursor: pointer;
     font-weight: bold;
+    padding: 10px 15px;
+    border-radius: 6px;
+    font-size: 14px;
     transition: background 0.2s;
+    width: auto; /* Botones de tamaño normal por defecto */
 }
 button:hover { background-color: #172554; }
 button:disabled { background-color: #9ca3af; cursor: not-allowed; }
@@ -105,68 +85,338 @@ button:disabled { background-color: #9ca3af; cursor: not-allowed; }
 .btn-danger { background-color: var(--danger); }
 .btn-danger:hover { background-color: #b91c1c; }
 
-/* --- Confirmación manual --- */
-.confirm-box {
-    margin-top: 15px;
-    padding: 16px;
-    border-radius: 8px;
-    background: #fffbeb;
-    border: 2px solid var(--warning);
-    text-align: center;
-}
-.confirm-texto { font-size: 16px; margin-bottom: 12px; }
-.confirm-botones { display: flex; gap: 10px; }
-.confirm-botones button { width: auto; flex: 1; margin-top: 0; }
-
-/* --- Resumen de asistencia por curso --- */
-.resumen-lista { margin-top: 10px; font-size: 13px; }
-.resumen-fila {
+/* Estilo para las pestañas superiores */
+.tabs {
     display: flex;
-    justify-content: space-between;
-    padding: 6px 0;
-    border-bottom: 1px solid #f3f4f6;
+    gap: 10px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #d1d5db;
+    padding-bottom: 10px;
+    justify-content: center;
 }
-.resumen-fila strong { color: var(--primary); }
+
+.tab-btn {
+    background-color: #e5e7eb;
+    color: var(--dark);
+    font-size: 16px;
+    padding: 12px 24px;
+    border-radius: 8px 8px 0 0; /* Bordes redondeados solo arriba */
+}
+
+.tab-btn:hover { background-color: #d1d5db; }
+.tab-btn.activo { background-color: var(--primary); color: white; }
+
+/* =========================================
+   4. TARJETAS DE CURSOS Y FORMULARIOS
+   ========================================= */
+.tarjetas-cursos {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+}
+
+/* Asegura que las tarjetitas que genera JS se vean lindas */
+.tarjetas-cursos > div {
+    background: white;
+    border: 1px solid #d1d5db;
+    padding: 15px;
+    border-radius: 8px;
+    min-width: 140px;
+    text-align: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.tarjetas-cursos button {
+    width: 100%; /* Botones dentro de tarjetas ocupan toda la tarjeta */
+    margin-top: 10px;
+}
+
+input, select {
+    padding: 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.fila-horario {
+    display: flex;
+    gap: 15px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    margin-top: 15px;
+    background: #f9fafb;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+}
+
+.fila-horario label {
+    display: flex;
+    flex-direction: column;
+    font-size: 13px;
+    font-weight: bold;
+    color: #4b5563;
+    gap: 5px;
+}
+
+/* =========================================
+   5. TABLAS Y OTROS ELEMENTOS
+   ========================================= */
+.tabla-scroll {
+    overflow-x: auto;
+    margin-top: 15px;
+}
 
 table {
     width: 100%;
     border-collapse: collapse;
     margin-top: 10px;
 }
+
 th, td {
-    padding: 10px;
+    padding: 12px;
     text-align: left;
     border-bottom: 1px solid #e5e7eb;
     font-size: 14px;
 }
-th { background-color: #f9fafb; color: #4b5563; }
 
-/* --- Pantalla de Login --- */
-.login-container {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 100vh;
+th {
+    background-color: #f9fafb;
+    color: #4b5563;
+    font-weight: bold;
 }
 
-.login-card {
-    background: white;
-    padding: 30px;
-    border-radius: 12px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-    width: 100%;
-    max-width: 380px;
+.diag-box {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #6b7280;
     text-align: center;
 }
 
-.login-card h2 {
-    color: var(--primary);
-    margin-top: 0;
-    margin-bottom: 5px;
-}
-
-.login-card .subtitle {
+/* Utilidad para textos de ayuda */
+.texto-ayuda {
     color: #6b7280;
     font-size: 14px;
-    margin-bottom: 20px;
+    margin-bottom: 15px;
 }
+
+/* =========================================
+   6. ESTILOS ADICIONALES PARA ACORDEÓN Y TARJETAS
+   ========================================= */
+
+/* Pestañas de estado (Pills) en la tabla */
+.pill {
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: bold;
+    display: inline-block;
+}
+.pill-tarde { background-color: #fee2e2; color: #991b1b; }
+.pill-presente { background-color: #d1fae5; color: #065f46; }
+
+/* Tarjetas de cursos superiores / resumen */
+.tarjeta-curso {
+    background: white;
+    border: 1px solid #d1d5db;
+    padding: 15px;
+    border-radius: 8px;
+    min-width: 130px;
+    text-align: center;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    transition: all 0.2s ease;
+}
+.tarjeta-curso:hover {
+    border-color: var(--primary);
+    transform: translateY(-2px);
+}
+.tarjeta-curso.tarjeta-activa {
+    border: 2px solid var(--primary);
+    background-color: #eff6ff;
+}
+.tarjeta-curso-nombre { font-size: 16px; font-weight: bold; color: var(--primary); }
+.tarjeta-curso-cantidad { font-size: 22px; font-weight: bold; margin: 5px 0; }
+.tarjeta-curso-descargar {
+    font-size: 11px;
+    padding: 4px 8px;
+    background-color: #4b5563;
+    margin-top: 5px;
+    width: 100%;
+}
+
+/* Checkboxes de cursos múltiples */
+.checkbox-cursos {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+    margin: 15px 0;
+}
+.checkbox-curso {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+}
+.checkbox-curso input {
+    width: auto;
+    margin: 0;
+}
+
+/* Acordeón de horarios por curso */
+.acordeon-item {
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    margin-bottom: 12px;
+    background: white;
+    overflow: hidden;
+}
+.acordeon-cabecera {
+    padding: 15px 20px;
+    background: #f9fafb;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background 0.2s;
+}
+.acordeon-cabecera:hover {
+    background: #f3f4f6;
+}
+.acordeon-cuerpo {
+    padding: 20px;
+    border-top: 1px solid #d1d5db;
+    background: white;
+}
+.acordeon-cuerpo h4 {
+    margin-top: 15px;
+    margin-bottom: 10px;
+    font-size: 15px;
+    color: var(--primary);
+}
+
+/* Tarjetas de contraturnos dentro del acordeón */
+.tarjeta-contraturno {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    padding: 10px 15px;
+    border-radius: 6px;
+    margin-bottom: 8px;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+/* Badges e inputs para los días de la semana */
+.dias-checkbox-fila {
+    display: flex;
+    gap: 15px;
+    margin: 10px 0;
+    flex-wrap: wrap;
+}
+.dia-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    font-weight: bold;
+    color: #4b5563;
+}
+.dia-checkbox input { width: auto; margin: 0; }
+
+.dia-badge {
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    line-height: 24px;
+    text-align: center;
+    border-radius: 50%;
+    background-color: #e5e7eb;
+    color: #6b7280;
+    font-size: 11px;
+    font-weight: bold;
+    margin-right: 2px;
+}
+.dia-badge.dia-activo {
+    background-color: var(--primary);
+    color: white;
+}
+
+/* Botones de filtro secundario para la tabla de asistencia */
+.btn-filtro {
+    background-color: #f3f4f6;
+    border: 1px solid #d1d5db;
+    color: #4b5563;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-filtro:hover {
+    background-color: #e5e7eb;
+}
+
+.btn-filtro.activo {
+    background-color: var(--primary, #2563eb);
+    color: white;
+    border-color: var(--primary, #2563eb);
+}
+
+.btn-filtro-turno {
+    background-color: #f3f4f6;
+    border: 1px solid #d1d5db;
+    color: #4b5563;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.btn-filtro-turno.activo {
+    background-color: #2563eb;
+    color: white;
+    border-color: #2563eb;
+}
+
+/* Estilos para agrandar la letra y armar la ventana flotante (Modal) */
+.lista-curso-grande {
+    font-size: 1.15rem; /* Letra un poco más grande y cómoda */
+}
+.modal-asistencia {
+    display: none; 
+    position: fixed; 
+    z-index: 1000; 
+    left: 0; top: 0; 
+    width: 100%; height: 100%; 
+    background-color: rgba(0,0,0,0.5); 
+    justify-content: center; 
+    align-items: center;
+}
+.modal-contenido {
+    background-color: #fff; 
+    padding: 30px; 
+    border-radius: 10px; 
+    width: 90%; max-width: 600px; 
+    max-height: 85vh; 
+    overflow-y: auto;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+}
+.btn-cerrar-modal {
+    float: right;
+    font-size: 1.8rem;
+    font-weight: bold;
+    cursor: pointer;
+    color: #aaa;
+    border: none;
+    background: none;
+}
+.btn-cerrar-modal:hover { color: #000; }

@@ -1,0 +1,11 @@
+flask
+pandas
+numpy
+opencv-python
+face_recognition
+pyserial
+pywebview[qt]
+pyinstaller
+pyzk
+# También pip install "setuptools<70.0.0"
+ 
